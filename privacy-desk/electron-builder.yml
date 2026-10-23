@@ -1,0 +1,20 @@
+appId: com.privacy.desktop
+productName: 隐盾 PrivacyDesk
+directories:
+  output: release
+files:
+  - electron/**
+  - package.json
+extraResources:
+  - from: backend/dist/privacy-backend
+    to: backend
+  - from: frontend/dist
+    to: ui
+asar: true
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true

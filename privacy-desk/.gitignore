@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+dist/
+build/
+release/
+.eb-cache/
+!backend/build/
+!backend/build/*.py
+!backend/build/*.spec
+backend/build/pyinstaller/
+*.log
+*.egg-info/
+*.tsbuildinfo
