@@ -1,0 +1,193 @@
+import json
+import shutil
+import tempfile
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
+from starlette.background import BackgroundTask
+
+from app.api.deps import get_context, require_unlocked, verify_password
+from app.context import AppContext
+from app.core import pipeline
+from app.core.ingest.docx_loader import load_docx
+from app.core.ingest.registry import export_document
+from app.core.ingest.writer import write_pdf
+
+router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+class DetectIn(BaseModel):
+    use_llm: bool = True
+
+
+class MaskIn(BaseModel):
+    actions: dict[str, dict] = {}
+    verify: bool = True
+
+
+class EditIn(BaseModel):
+    text: str
+
+
+def _not_found() -> HTTPException:
+    return HTTPException(404, "文档不存在")
+
+
+@router.post("")
+async def upload(
+    file: UploadFile = File(...), ctx: AppContext = Depends(get_context)
+) -> dict:
+    require_unlocked(ctx)
+    raw = await file.read()
+    try:
+        doc_id = pipeline.create_document_from_bytes(ctx, file.filename or "upload.txt", raw)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return ctx.repo.get_document(doc_id)
+
+
+@router.get("")
+def list_documents(ctx: AppContext = Depends(get_context)) -> list[dict]:
+    require_unlocked(ctx)
+    return ctx.repo.list_documents()
+
+
+@router.get("/{doc_id}")
+def get_document(doc_id: str, ctx: AppContext = Depends(get_context)) -> dict:
+    require_unlocked(ctx)
+    try:
+        document = ctx.repo.get_document(doc_id)
+        document["text"] = ctx.repo.get_text(doc_id, "original")
+        document["detections"] = ctx.repo.get_detections(doc_id)
+        return document
+    except KeyError as exc:
+        raise _not_found() from exc
+
+
+@router.put("/{doc_id}/content")
+def edit_content(
+    doc_id: str, payload: EditIn, ctx: AppContext = Depends(get_context)
+) -> dict:
+    require_unlocked(ctx)
+    try:
+        ctx.repo.get_document(doc_id)
+    except KeyError as exc:
+        raise _not_found() from exc
+    ctx.repo.save_version(doc_id, "original", payload.text)
+    ctx.repo.clear_detections(doc_id)
+    ctx.repo.update_status(doc_id, "uploaded")
+    return {"id": doc_id, "length": len(payload.text)}
+
+
+@router.post("/{doc_id}/detect")
+def detect(
+    doc_id: str, payload: DetectIn, ctx: AppContext = Depends(get_context)
+) -> dict:
+    require_unlocked(ctx)
+    try:
+        result = pipeline.detect_document(ctx, doc_id, payload.use_llm)
+    except KeyError as exc:
+        raise _not_found() from exc
+    return {
+        "spans": [span.to_dict() for span in result["spans"]],
+        "mode": result["mode"],
+        "text_length": result["text_length"],
+    }
+
+
+@router.post("/{doc_id}/mask")
+def mask(
+    doc_id: str, payload: MaskIn, ctx: AppContext = Depends(get_context)
+) -> dict:
+    require_unlocked(ctx)
+    try:
+        result = pipeline.mask_document(ctx, doc_id, payload.actions, payload.verify)
+    except KeyError as exc:
+        raise _not_found() from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "masked_text": result["masked_text"],
+        "applied": result["applied"],
+        "stats": result["stats"],
+        "verify": result["verify"],
+        "job_id": result["job_id"],
+        "summary": result["report"]["summary"],
+    }
+
+
+@router.post("/{doc_id}/verify")
+def verify(doc_id: str, ctx: AppContext = Depends(get_context)) -> dict:
+    require_unlocked(ctx)
+    try:
+        return pipeline.verify_document(ctx, doc_id)
+    except KeyError as exc:
+        raise HTTPException(404, "文档或脱敏结果不存在") from exc
+
+
+@router.get("/{doc_id}/compare")
+def compare(doc_id: str, ctx: AppContext = Depends(get_context)) -> dict:
+    require_unlocked(ctx)
+    try:
+        return pipeline.compare_document(ctx, doc_id)
+    except KeyError as exc:
+        raise HTTPException(404, "文档或脱敏结果不存在") from exc
+
+
+@router.get("/{doc_id}/export")
+def export(
+    doc_id: str,
+    kind: str = "masked",
+    fmt: str = "auto",
+    password: str | None = None,
+    ctx: AppContext = Depends(get_context),
+):
+    require_unlocked(ctx)
+    try:
+        document = ctx.repo.get_document(doc_id)
+        if kind not in {"masked", "report"}:
+            raise HTTPException(400, "不支持的导出类型")
+        if kind == "report":
+            if document["status"] == "uploaded":
+                raise HTTPException(409, "报告已过期，请重新识别并脱敏")
+            # 报告包含识别与替换明细，导出前需再次校验主密码
+            verify_password(ctx, password)
+            report_format = "pdf" if fmt == "pdf" else "json"
+            payload = ctx.repo.latest_report(doc_id, report_format)
+            media = "application/pdf" if report_format == "pdf" else "application/json"
+            return Response(
+                payload,
+                media_type=media,
+                headers={
+                    "Content-Disposition": f'attachment; filename="report.{report_format}"'
+                },
+            )
+        if document["status"] in {"uploaded", "detected"}:
+            raise HTTPException(409, "尚未完成有效脱敏，禁止导出")
+        if fmt not in {"auto", document["ext"]}:
+            raise HTTPException(400, "仅支持按原格式导出")
+        masked = ctx.repo.get_text(doc_id, "masked")
+        ext = document["ext"] if fmt == "auto" else fmt
+        workdir = Path(tempfile.mkdtemp())
+        target = workdir / f"masked.{ext}"
+        if ext == "docx":
+            source_path = workdir / "source.docx"
+            source_path.write_bytes(ctx.repo.get_blob(doc_id, "source"))
+            try:
+                applied = json.loads(ctx.repo.get_text(doc_id, "applied"))
+            except KeyError:
+                applied = None
+            export_document(load_docx(source_path), masked, target, "docx", applied=applied)
+        elif ext == "pdf":
+            write_pdf(masked, target)
+        else:
+            target.write_text(masked, encoding="utf-8")
+        return FileResponse(
+            target,
+            filename=f"masked.{ext}",
+            background=BackgroundTask(shutil.rmtree, workdir, ignore_errors=True),
+        )
+    except KeyError as exc:
+        raise HTTPException(404, "文档或导出结果不存在") from exc
