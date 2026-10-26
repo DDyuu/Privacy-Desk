@@ -1,2 +1,25 @@
 /Office-Word-MCP-Server
 /temp
+.screenshots/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Node / 构建产物
+node_modules/
+dist/
+build/
+release/
+.eb-cache/
+!backend/build/
+!backend/build/*.py
+!backend/build/*.spec
+backend/build/pyinstaller/
+*.tsbuildinfo
+
+# 日志
+*.log

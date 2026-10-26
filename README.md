@@ -71,7 +71,7 @@
 
 ```powershell
 # 1) 后端依赖（首次）
-cd privacy-desk\backend
+cd backend
 py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 
@@ -97,7 +97,7 @@ npm run dev
 
 ## 八、构建安装包
 
-在 `privacy-desk` 根目录执行：
+在仓库根目录执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
@@ -142,7 +142,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ## 十一、目录结构
 
 ```
-privacy-desk/
+.
 ├─ frontend/              React + Vite 前端
 ├─ backend/               FastAPI 后端（run.py 为入口）
 │  ├─ app/
