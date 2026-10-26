@@ -1,5 +1,8 @@
 # 隐盾 PrivacyDesk 使用说明
 
+[![Latest Release](https://img.shields.io/github/v/release/DDyuu/Privacy-Desk?label=release&style=flat-square)](https://github.com/DDyuu/Privacy-Desk/releases/latest)
+[![Download](https://img.shields.io/github/downloads/DDyuu/Privacy-Desk/total?label=downloads&style=flat-square)](https://github.com/DDyuu/Privacy-Desk/releases)
+
 隐盾 PrivacyDesk 是一款**完全本地运行**的文档隐私脱敏桌面应用。后端为本地 FastAPI 服务，前端为 React + Ant Design 界面，由 Electron 外壳以随机端口 + 一次性令牌拉起后端，所有业务数据保存在本机，不上传云端（启用在线大模型时除外，且会先做本地高敏遮蔽）。
 
 ## 一、功能清单
@@ -13,6 +16,10 @@
 - **大模型设置**：在线 API（DeepSeek / OpenAI 兼容）、本地 Ollama、纯规则三种模式；在线模式失败时自动降级到 Ollama 或纯规则。
 
 ## 二、安装与首次使用
+
+**下载安装包**：[隐盾 PrivacyDesk 0.2.0（Windows x64）](https://github.com/DDyuu/Privacy-Desk/releases/download/v0.2.0/PrivacyDesk.Setup.0.2.0.exe) ｜ [历史版本与更新说明](https://github.com/DDyuu/Privacy-Desk/releases)
+
+> GitHub 会清理资源名中的中文字符，下载后的文件名形如 `PrivacyDesk.Setup.0.2.0.exe`；安装完成后的程序名仍为「隐盾 PrivacyDesk」。
 
 1. 双击安装包 `隐盾 PrivacyDesk Setup x.y.z.exe`，按向导选择安装目录（支持自定义路径），完成后桌面会生成快捷方式。
 2. 首次启动会进入“设置主密码”页面：密码至少 8 位，需要输入两次确认。
