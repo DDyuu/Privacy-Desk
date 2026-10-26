@@ -86,6 +86,22 @@ def test_llm_engine_keeps_address_with_digits():
     assert [text[item.start : item.end] for item in spans] == ["北京市朝阳区1号"]
 
 
+def test_llm_engine_accepts_suspected_type_for_unknown_fields():
+    class SuspectLLM(BaseLLM):
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            assert any(item["code"] == "SUSPECTED" for item in hints)
+            return [{"type": "SUSPECTED", "text": "2026/10/26", "confidence": 0.6}]
+
+    engine = LLMEngine(SuspectLLM(), load_builtin_types(RESOURCES))
+    spans = engine.detect("出生日期2026/10/26", [])
+    assert spans[0].type_code == "SUSPECTED"
+    assert spans[0].level == "low"
+    assert spans[0].text == "2026/10/26"
+
+
 def test_llm_engine_skips_whitespace_and_single_char_fragments():
     class BadLLM(BaseLLM):
         def available(self):

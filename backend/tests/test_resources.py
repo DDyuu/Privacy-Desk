@@ -12,7 +12,7 @@ RESOURCES = Path(__file__).resolve().parents[1] / "resources"
 def test_pack_and_load_bundle(tmp_path):
     pack_bundle(RESOURCES, tmp_path / "rules.enc")
     bundle = load_bundle(tmp_path)
-    assert len(bundle["types"]) == 15
+    assert len(bundle["types"]) == 17
     assert "隐私" in bundle["prompt"]
 
 
@@ -53,4 +53,4 @@ def test_load_builtin_types_prefers_encrypted_bundle(tmp_path):
 
     payload = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
     (tmp_path / "rules.enc").write_bytes(crypto.encrypt(resource_key(), payload, b"rules"))
-    assert len(load_builtin_types(tmp_path)) == 15
+    assert len(load_builtin_types(tmp_path)) == 17

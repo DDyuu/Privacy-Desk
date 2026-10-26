@@ -20,9 +20,10 @@ def test_builtin_types_loaded():
     codes = {t.code for t in types}
     assert {
         "ID_CARD_CN", "ID_CARD_LOOSE", "PHONE_CN", "PHONE_LOOSE", "BANK_CARD", "BANK_CARD_LOOSE",
-        "NAME_CN", "EMPLOYEE_ID", "ADDRESS_CN", "ADDRESS_PARTIAL", "SECRET_INFO",
+        "NAME_CN", "EMPLOYEE_ID", "ADDRESS_CN", "ADDRESS_PARTIAL", "SECRET_INFO", "SUSPECTED",
+        "GENDER",
     } <= codes
-    assert len(types) == 15
+    assert len(types) == 17
     id_card = next(t for t in types if t.code == "ID_CARD_CN")
     assert id_card.level == "high"
     assert id_card.default_action == "mask"

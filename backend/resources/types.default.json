@@ -129,6 +129,23 @@
     "defaultAction": "fuzz", "actionOptions": {}
   },
   {
+    "code": "GENDER", "name": "性别", "category": "personal", "level": "low",
+    "builtin": true, "enabled": true,
+    "detectors": [
+      {"kind": "regex", "flags": ["i"], "pattern": "(?:(?<=性别)|(?<=gender))[:：\\s]{0,4}(?:男性|女性|male|female|男|女)(?![A-Za-z])"},
+      {"kind": "llm", "hint": "性别值，如男、女、male、female；只返回性别值本身"}
+    ],
+    "defaultAction": "mask", "actionOptions": {"keepPrefix": 0, "keepSuffix": 0}
+  },
+  {
+    "code": "SUSPECTED", "name": "疑似敏感信息", "category": "custom", "level": "low",
+    "builtin": true, "enabled": true,
+    "detectors": [
+      {"kind": "llm", "hint": "疑似敏感但无法归入具体类型的具体值，如出生日期、密钥、车牌、账号等；只返回具体值，不要返回整句"}
+    ],
+    "defaultAction": "mask", "actionOptions": {"keepPrefix": 0, "keepSuffix": 0}
+  },
+  {
     "code": "SECRET_INFO", "name": "涉密信息", "category": "secret", "level": "high",
     "builtin": true, "enabled": true,
     "detectors": [

@@ -80,6 +80,12 @@ def test_detects_loose_variants_with_labels():
     assert any(code == "ADDRESS_PARTIAL" for code, _ in found)
 
 
+def test_detects_labeled_gender():
+    text = "性别男\n性别：女\n性别: male\nGender: female\n性别的讨论"
+    found = {s.text for s in engine().detect(text) if s.type_code == "GENDER"}
+    assert found == {"男", "女", "male", "female"}
+
+
 def test_span_to_dict():
     span = Span(0, 3, "X", "abc", 0.9, "rule", "low")
     assert span.to_dict()["type_code"] == "X"
