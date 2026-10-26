@@ -1,6 +1,8 @@
 :root {
   --brand: #0f766e;
   --ink: #0b1220;
+  --titlebar: #1b2a44;
+  --titlebar-height: 36px;
   --muted: #64748b;
   --bg: #f5f7fa;
   --panel: #ffffff;
@@ -15,8 +17,31 @@ body {
   color: var(--ink);
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
 }
+/* 自定义标题栏：整条可拖动，右上角由系统绘制窗口按钮 */
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  height: env(titlebar-area-height, var(--titlebar-height));
+  padding: 0 20px;
+  background: var(--titlebar);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  color: #e2e8f0;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.titlebar-slogan {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #94a3b8;
+}
 .app-shell {
   min-height: 100vh;
+  padding-top: env(titlebar-area-height, var(--titlebar-height));
 }
 .app-sider {
   background: var(--ink) !important;
@@ -96,12 +121,6 @@ mark.hit-low {
 .app-sider .ant-menu-item-selected {
   background-color: var(--brand) !important;
 }
-.sider-foot {
-  color: #475569;
-  font-size: 11px;
-  padding: 16px 20px;
-  line-height: 1.7;
-}
 
 /* 顶栏 */
 .app-header {
@@ -133,11 +152,13 @@ mark.hit-low {
 .boot-screen {
   flex-direction: column;
   gap: 16px;
+  padding-top: env(titlebar-area-height, var(--titlebar-height));
   background: var(--bg);
   color: var(--muted);
 }
 .lock-screen {
   padding: 24px;
+  padding-top: calc(env(titlebar-area-height, var(--titlebar-height)) + 24px);
   background:
     radial-gradient(circle at 15% 15%, rgba(15, 118, 110, 0.28), transparent 42%),
     radial-gradient(circle at 85% 85%, rgba(30, 64, 175, 0.22), transparent 45%),

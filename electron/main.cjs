@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, Menu, dialog } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -15,6 +15,7 @@ const OUTPUT_LIMIT = 8000;
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const DESIGN_WIDTH = 1440;
 const DESIGN_HEIGHT = 960;
+const TITLEBAR_HEIGHT = 36;
 
 let mainWindow = null;
 let backendChild = null;
@@ -229,6 +230,13 @@ function createWindow(port, token) {
     minHeight: 640,
     show: false,
     backgroundColor: "#f5f7fa",
+    // 隐藏系统标题栏，窗口控制按钮以覆盖层形式保留在右上角
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: "#1b2a44",
+      symbolColor: "#e2e8f0",
+      height: TITLEBAR_HEIGHT,
+    },
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -342,5 +350,9 @@ if (!gotLock) {
     stopBackend();
   });
 
-  app.whenReady().then(start);
+  app.whenReady().then(() => {
+    // 去掉 Windows 默认菜单栏（文件 / 编辑 / 视图 / 窗口 / 帮助）
+    Menu.setApplicationMenu(null);
+    start();
+  });
 }

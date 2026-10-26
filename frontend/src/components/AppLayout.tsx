@@ -74,11 +74,6 @@ export default function AppLayout({ status, page, onPageChange, onLock, children
           items={menuItems}
           onClick={({ key }) => onPageChange(key as PageKey)}
         />
-        <div className="sider-foot">
-          本地运行
-          <br />
-          数据不出设备
-        </div>
       </Layout.Sider>
       <Layout>
         <Layout.Header className="app-header">
