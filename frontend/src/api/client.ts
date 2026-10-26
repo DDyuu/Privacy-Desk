@@ -19,6 +19,8 @@ declare global {
       apiBase: string;
       token: string;
       setWindowMode?: (mode: "lock" | "workbench") => void;
+      fadeWindow?: (direction: "out" | "in") => void;
+      onWindowModeApplied?: (callback: (mode: "lock" | "workbench") => void) => () => void;
     };
   }
 }

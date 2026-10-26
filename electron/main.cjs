@@ -16,6 +16,7 @@ const DEFAULT_DEV_URL = "http://localhost:5173";
 const DESIGN_WIDTH = 1440;
 const DESIGN_HEIGHT = 960;
 const TITLEBAR_HEIGHT = 36;
+const WINDOW_FADE_MS = 180;
 const LOCK_WIDTH = 460;
 const LOCK_HEIGHT = 460;
 const LOCK_MIN_WIDTH = 440;
@@ -23,6 +24,8 @@ const LOCK_MIN_HEIGHT = 440;
 
 let mainWindow = null;
 let windowMode = "lock";
+let opacityTimer = null;
+let modeAppliedToken = 0;
 let backendChild = null;
 let backendToken = "";
 let backendPort = 0;
@@ -231,6 +234,30 @@ function applyContentZoom(win) {
   win.webContents.setZoomFactor(Math.min(Math.max(scale, 0.5), 2));
 }
 
+/** 整窗透明度渐变：让窗口尺寸切换发生在不可见的时候 */
+function animateWindowOpacity(win, target) {
+  if (opacityTimer !== null) {
+    clearInterval(opacityTimer);
+    opacityTimer = null;
+  }
+  const from = win.getOpacity();
+  if (from === target) return;
+  const started = Date.now();
+  opacityTimer = setInterval(() => {
+    if (win.isDestroyed()) {
+      clearInterval(opacityTimer);
+      opacityTimer = null;
+      return;
+    }
+    const progress = Math.min((Date.now() - started) / WINDOW_FADE_MS, 1);
+    win.setOpacity(from + (target - from) * progress);
+    if (progress >= 1) {
+      clearInterval(opacityTimer);
+      opacityTimer = null;
+    }
+  }, 16);
+}
+
 function enterWorkbenchMode(win) {
   windowMode = "workbench";
   win.setResizable(true);
@@ -253,6 +280,15 @@ function enterLockMode(win) {
   win.setMaximizable(false);
   win.setResizable(false);
   win.webContents.setZoomFactor(1);
+}
+
+/** 尺寸与缩放应用后通知渲染进程，避免新界面先按旧尺寸布局再被拉伸 */
+function notifyWindowModeApplied(win, mode) {
+  const token = ++modeAppliedToken;
+  setTimeout(() => {
+    if (token !== modeAppliedToken || win.isDestroyed()) return;
+    win.webContents.send("window:mode-applied", mode);
+  }, 80);
 }
 
 function createWindow(port, token) {
@@ -393,9 +429,16 @@ if (!gotLock) {
       if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
       if (mode === "workbench") {
         enterWorkbenchMode(win);
+        notifyWindowModeApplied(win, "workbench");
       } else if (mode === "lock") {
         enterLockMode(win);
+        notifyWindowModeApplied(win, "lock");
       }
+    });
+    ipcMain.on("window:fade", (event, direction) => {
+      const win = mainWindow;
+      if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
+      animateWindowOpacity(win, direction === "out" ? 0 : 1);
     });
     start();
   });

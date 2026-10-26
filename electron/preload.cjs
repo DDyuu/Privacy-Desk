@@ -16,4 +16,12 @@ contextBridge.exposeInMainWorld("privacyDesk", {
   setWindowMode: (mode) => {
     ipcRenderer.send("window:mode", mode === "workbench" ? "workbench" : "lock");
   },
+  fadeWindow: (direction) => {
+    ipcRenderer.send("window:fade", direction === "out" ? "out" : "in");
+  },
+  onWindowModeApplied: (callback) => {
+    const listener = (_event, mode) => callback(mode === "workbench" ? "workbench" : "lock");
+    ipcRenderer.on("window:mode-applied", listener);
+    return () => ipcRenderer.removeListener("window:mode-applied", listener);
+  },
 });
