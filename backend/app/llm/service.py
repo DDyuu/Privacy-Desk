@@ -6,6 +6,7 @@ from app.core.detect.rule_engine import Span
 from app.core.detect.types import TypeDefinition
 from app.core.store.repository import Repository
 from app.llm.client import LLMError, NullLLM, OllamaLLM, OpenAICompatLLM
+from app.llm.env_keys import detect_env_keys, normalize_names
 
 
 class LLMService:
@@ -13,22 +14,78 @@ class LLMService:
         self._repo = repo
         self._settings = settings
 
+    def _stored(self) -> dict:
+        try:
+            return self._repo.get_setting("llm") or {}
+        except Exception:
+            return {}
+
+    def env_key_names(self) -> list[str]:
+        return normalize_names(self._stored().get("env_key_names") or [])
+
+    def stored_api_key(self) -> str:
+        """已保存（加密落库）的 Key；不包含环境变量回退结果。"""
+        return str(self._stored().get("api_key") or "")
+
+    def _resolve_key(self) -> tuple[str, str]:
+        """返回 (明文 Key, 来源)，来源为 stored / env:变量名 / none。"""
+        saved = self.stored_api_key()
+        if saved:
+            return saved, "stored"
+        for item in detect_env_keys(self.env_key_names()):
+            return item["value"], f"env:{item['name']}"
+        return "", "none"
+
+    def key_source(self) -> str:
+        return self._resolve_key()[1]
+
+    def preview_key_source(self, names: list[str]) -> str:
+        """按给定变量名预览 Key 来源：已保存的 Key 优先，否则取首个命中的环境变量。"""
+        if self.stored_api_key():
+            return "stored"
+        detected = detect_env_keys(normalize_names(names))
+        return f"env:{detected[0]['name']}" if detected else "none"
+
+    def env_key_candidates(
+        self, names: list[str] | None = None, source: str | None = None
+    ) -> list[dict]:
+        """对外暴露的环境变量候选，只含掩码，不含明文 Key。"""
+        source = self.key_source() if source is None else source
+        custom = self.env_key_names() if names is None else normalize_names(names)
+        return [
+            {
+                "name": item["name"],
+                "provider": item["provider"],
+                "masked": item["masked"],
+                "base_url": item["base_url"],
+                "model": item["model"],
+                "active": source == f"env:{item['name']}",
+            }
+            for item in detect_env_keys(custom)
+        ]
+
     def default_config(self) -> dict:
         return {
             "mode": "online" if self._settings.llm_api_key else "rules",
             "base_url": self._settings.llm_base_url,
             "model": self._settings.llm_model,
-            "api_key": self._settings.llm_api_key or "",
+            "api_key": "",
+            "env_key_names": [],
             "ollama_url": self._settings.ollama_url,
             "ollama_model": self._settings.ollama_model,
         }
 
     def config(self) -> dict:
-        try:
-            stored = self._repo.get_setting("llm")
-        except Exception:
-            stored = None
-        return {**self.default_config(), **(stored or {})}
+        stored = self._stored()
+        merged = {**self.default_config(), **stored}
+        key, _ = self._resolve_key()
+        if not merged.get("api_key") and key:
+            merged["api_key"] = key
+            # 首次运行尚未保存过配置时，检测到 Key 即启用在线模式
+            if "mode" not in stored:
+                merged["mode"] = "online"
+        merged["env_key_names"] = self.env_key_names()
+        return merged
 
     def set_config(self, config: dict) -> None:
         self._repo.set_setting("llm", config)

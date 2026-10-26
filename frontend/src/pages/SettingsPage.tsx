@@ -4,6 +4,7 @@ import {
   App,
   Button,
   Card,
+  Collapse,
   Form,
   Input,
   Select,
@@ -13,7 +14,7 @@ import {
   Typography,
 } from "antd";
 import { api, errorText } from "../api/client";
-import type { LLMConfig, OllamaStatus } from "../types";
+import type { EnvKeyInfo, LLMConfig, OllamaStatus } from "../types";
 
 const MODE_OPTIONS: Array<{ value: LLMConfig["mode"]; label: string }> = [
   { value: "online", label: "在线 API" },
@@ -34,6 +35,7 @@ interface SettingsFormValues {
   api_key?: string;
   ollama_url?: string;
   ollama_model?: string;
+  env_key_names?: string[];
 }
 
 interface TestResult {
@@ -52,6 +54,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
   const { message } = App.useApp();
   const [form] = Form.useForm<SettingsFormValues>();
   const watchedMode: LLMConfig["mode"] | undefined = Form.useWatch("mode", form);
+  const watchedBaseUrl: string | undefined = Form.useWatch("base_url", form);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -60,6 +63,9 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [hasKey, setHasKey] = useState(false);
+  const [envKeys, setEnvKeys] = useState<EnvKeyInfo[]>([]);
+  const [keySource, setKeySource] = useState("none");
+  const [detecting, setDetecting] = useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [checkingOllama, setCheckingOllama] = useState(false);
   const ollamaCheckedRef = useRef<string | null>(null);
@@ -70,6 +76,8 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
     try {
       const config = await api.settings.getLlm();
       setHasKey(Boolean(config.has_key));
+      setEnvKeys(config.env_keys ?? []);
+      setKeySource(config.key_source ?? "none");
       form.setFieldsValue({
         mode: config.mode,
         base_url: config.base_url,
@@ -77,6 +85,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
         api_key: "",
         ollama_url: config.ollama_url,
         ollama_model: config.ollama_model,
+        env_key_names: config.env_key_names ?? [],
       });
     } catch (exc) {
       setLoadError(errorText(exc));
@@ -117,6 +126,26 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedMode]);
 
+  const handleDetectEnv = async () => {
+    setDetecting(true);
+    try {
+      const names = (form.getFieldValue("env_key_names") as string[] | undefined) ?? [];
+      const result = await api.settings.detectEnvKeys(names);
+      setHasKey(Boolean(result.has_key));
+      setEnvKeys(result.env_keys ?? []);
+      setKeySource(result.key_source ?? "none");
+      if ((result.env_keys ?? []).length === 0) {
+        message.warning("未检测到环境变量中的 API Key");
+      } else {
+        message.success(`检测到 ${result.env_keys?.length ?? 0} 个环境变量 Key`);
+      }
+    } catch (exc) {
+      message.error(errorText(exc));
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   const handleSave = async () => {
     let values: SettingsFormValues;
     try {
@@ -134,8 +163,11 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
         api_key: values.api_key ?? "",
         ollama_url: values.ollama_url ?? "",
         ollama_model: values.ollama_model ?? "",
+        env_key_names: values.env_key_names ?? [],
       });
       setHasKey(Boolean(saved.has_key));
+      setEnvKeys(saved.env_keys ?? []);
+      setKeySource(saved.key_source ?? "none");
       form.setFieldValue("api_key", "");
       message.success("配置已保存");
       if (values.mode === "ollama") {
@@ -200,6 +232,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
             api_key: "",
             ollama_url: "http://127.0.0.1:11434",
             ollama_model: "",
+            env_key_names: [],
           }}
         >
           <Form.Item name="mode" label="模式" rules={[{ required: true }]}>
@@ -229,10 +262,35 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
             </Form.Item>
             <Form.Item
               name="api_key"
-              label="API Key"
+              className="settings-api-key-item"
+              label={
+                <div className="settings-key-label">
+                  <span>API Key</span>
+                  <Space size={4} align="center">
+                    <Typography.Text>Key 储存在环境变量中？</Typography.Text>
+                    <Button
+                      size="small"
+                      type="link"
+                      loading={detecting}
+                      onClick={() => void handleDetectEnv()}
+                    >
+                      检测环境变量
+                    </Button>
+                  </Space>
+                </div>
+              }
               extra={
                 hasKey ? (
-                  <Tag color="green">已配置 Key</Tag>
+                  <Space size={4} wrap>
+                    <Tag color="green">已配置 Key</Tag>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {keySource === "stored"
+                        ? "来自本地加密存储"
+                        : keySource.startsWith("env:")
+                          ? `来自环境变量 ${keySource.slice(4)}`
+                          : ""}
+                    </Typography.Text>
+                  </Space>
                 ) : (
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     尚未配置 Key
@@ -242,6 +300,72 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
             >
               <Input.Password placeholder="已保存，留空则不修改" autoComplete="new-password" />
             </Form.Item>
+
+            <Collapse
+              ghost
+              size="small"
+              style={{ marginBottom: 16 }}
+              items={[
+                {
+                  key: "env",
+                  label: "环境变量名（可选）",
+                  children: (
+                    <Form.Item
+                      name="env_key_names"
+                      extra="留空时只检测内置变量 PRIVACY_DESK_LLM_KEY、DEEPSEEK_API_KEY、OPENAI_API_KEY；已保存的 Key 优先，环境变量仅作回退且不会写入数据库。"
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Select
+                        mode="tags"
+                        placeholder="输入自定义变量名后回车，如 MY_LLM_KEY"
+                        tokenSeparators={[",", " "]}
+                        open={false}
+                      />
+                    </Form.Item>
+                  ),
+                },
+              ]}
+            />
+
+            {envKeys.length > 0 ? (
+              <Alert
+                style={{ marginBottom: 16 }}
+                type={keySource === "stored" ? "info" : "success"}
+                showIcon
+                message={
+                  keySource === "stored"
+                    ? "已保存的 Key 生效中（优先级高于环境变量）"
+                    : keySource.startsWith("env:")
+                      ? "已从环境变量读取 API Key"
+                      : "检测到环境变量中的 API Key"
+                }
+                description={
+                  <Space direction="vertical" size={4}>
+                    {envKeys.map((item) => (
+                      <Space key={item.name} size={8} wrap>
+                        <Tag color={item.active ? "green" : "default"}>{item.provider}</Tag>
+                        <Typography.Text code>{item.name}</Typography.Text>
+                        <Typography.Text type="secondary">{item.masked}</Typography.Text>
+                        {item.active ? <Tag color="blue">当前生效</Tag> : null}
+                        {item.active &&
+                        item.base_url &&
+                        watchedBaseUrl &&
+                        item.base_url !== watchedBaseUrl ? (
+                          <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                            该变量对应 {item.base_url}
+                          </Typography.Text>
+                        ) : null}
+                      </Space>
+                    ))}
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {watchedMode === "rules"
+                        ? "当前为纯规则模式，切换到在线 API 后自动生效。"
+                        : "环境变量中的 Key 不会写入数据库，删除变量后即失效。"}
+                    </Typography.Text>
+                  </Space>
+                }
+              />
+            ) : null}
           </div>
 
           <div style={{ display: watchedMode === "ollama" ? undefined : "none" }}>

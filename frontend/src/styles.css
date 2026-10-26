@@ -417,3 +417,19 @@ mark.mask-replacement {
   font-size: 12px;
   line-height: 1.8;
 }
+
+/* 设置页：API Key 标签行，右侧放环境变量检测入口 */
+.settings-api-key-item .ant-form-item-label {
+  display: block;
+  max-width: 100%;
+}
+.settings-api-key-item .ant-form-item-label > label {
+  width: 100%;
+}
+.settings-key-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}

@@ -60,6 +60,15 @@ export interface SessionStatus {
   llm_mode: "online" | "ollama" | "rules";
 }
 
+export interface EnvKeyInfo {
+  name: string;
+  provider: string;
+  masked: string;
+  base_url: string;
+  model: string;
+  active: boolean;
+}
+
 export interface LLMConfig {
   mode: "online" | "ollama" | "rules";
   base_url: string;
@@ -68,6 +77,9 @@ export interface LLMConfig {
   ollama_url: string;
   ollama_model: string;
   has_key?: boolean;
+  key_source?: string;
+  env_keys?: EnvKeyInfo[];
+  env_key_names?: string[];
 }
 
 export interface OllamaStatus {

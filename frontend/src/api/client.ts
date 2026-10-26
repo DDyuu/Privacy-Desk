@@ -154,6 +154,10 @@ export const api = {
   },
   settings: {
     getLlm: () => request<LLMConfig>("/settings/llm"),
+    detectEnvKeys: (names: string[]) => {
+      const query = new URLSearchParams({ names: names.join(",") });
+      return request<LLMConfig>(`/settings/llm/env-keys?${query.toString()}`);
+    },
     saveLlm: (config: LLMConfig) =>
       request<LLMConfig>("/settings/llm", { method: "PUT", body: JSON.stringify(config) }),
     testLlm: () =>

@@ -5,6 +5,13 @@ from app.config import Settings
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def clear_llm_env(monkeypatch):
+    """避免开发机上的环境变量干扰配置相关断言。"""
+    for name in ("PRIVACY_DESK_LLM_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def client(tmp_path):
     app = create_app(Settings(data_dir=tmp_path, llm_api_key=None))
