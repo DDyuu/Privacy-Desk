@@ -13,6 +13,8 @@ const BACKEND_START_TIMEOUT_MS = 40000;
 const HEALTH_INTERVAL_MS = 500;
 const OUTPUT_LIMIT = 8000;
 const DEFAULT_DEV_URL = "http://localhost:5173";
+const DESIGN_WIDTH = 1440;
+const DESIGN_HEIGHT = 960;
 
 let mainWindow = null;
 let backendChild = null;
@@ -210,12 +212,21 @@ function isAllowedNavigation(target) {
   }
 }
 
+/** 按设计基准等比缩放页面，保证任意窗口尺寸下内容完整可见 */
+function applyContentZoom(win) {
+  if (win.isDestroyed()) return;
+  const [width, height] = win.getContentSize();
+  const scale = Math.min(width / DESIGN_WIDTH, height / DESIGN_HEIGHT);
+  win.webContents.setZoomFactor(Math.min(Math.max(scale, 0.5), 2));
+}
+
 function createWindow(port, token) {
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1100,
-    minHeight: 720,
+    width: DESIGN_WIDTH,
+    height: DESIGN_HEIGHT,
+    useContentSize: true,
+    minWidth: 960,
+    minHeight: 640,
     show: false,
     backgroundColor: "#f5f7fa",
     webPreferences: {
@@ -231,6 +242,16 @@ function createWindow(port, token) {
   });
 
   mainWindow = win;
+  // 锁定 3:2 宽高比，窗口缩放时页面整体等比缩放
+  win.setAspectRatio(DESIGN_WIDTH / DESIGN_HEIGHT);
+  win.on("resize", () => applyContentZoom(win));
+  win.webContents.on("did-finish-load", () => applyContentZoom(win));
+  // 禁用快捷键缩放，避免手动放大后内容溢出
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.control && ["+", "=", "-", "0"].includes(input.key)) {
+      event.preventDefault();
+    }
+  });
   win.once("ready-to-show", () => win.show());
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;

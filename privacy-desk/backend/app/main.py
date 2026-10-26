@@ -57,6 +57,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def token_guard(request, call_next):
+        # CORS 预检请求不会携带自定义令牌头，放行交给 CORSMiddleware 处理
+        if request.method == "OPTIONS":
+            return await call_next(request)
         if settings.app_token and request.url.path.startswith("/api/"):
             if request.headers.get("X-App-Token") != settings.app_token:
                 return JSONResponse({"detail": "启动令牌无效"}, status_code=401)
