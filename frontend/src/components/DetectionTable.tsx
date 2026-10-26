@@ -1,5 +1,15 @@
 import { useMemo, useState } from "react";
-import { Empty, Select, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
+import {
+  Checkbox,
+  Empty,
+  Select,
+  Space,
+  Spin,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Level, Span, TypeDefinition } from "../types";
 
@@ -9,13 +19,23 @@ const LEVEL_META: Record<Level, { label: string; color: string }> = {
   low: { label: "低", color: "blue" },
 };
 
+const spanKey = (span: Span) => `${span.start}-${span.end}-${span.type_code}`;
+
 interface DetectionTableProps {
   spans: Span[];
   byCode: Record<string, TypeDefinition>;
   loading?: boolean;
+  ignoredKeys?: string[];
+  onToggleIgnore?: (span: Span) => void;
 }
 
-export default function DetectionTable({ spans, byCode, loading = false }: DetectionTableProps) {
+export default function DetectionTable({
+  spans,
+  byCode,
+  loading = false,
+  ignoredKeys = [],
+  onToggleIgnore,
+}: DetectionTableProps) {
   const [filterCode, setFilterCode] = useState("all");
 
   const codes = useMemo(
@@ -32,6 +52,19 @@ export default function DetectionTable({ spans, byCode, loading = false }: Detec
   }, [spans, activeFilter]);
 
   const columns: ColumnsType<Span> = [
+    {
+      title: "忽略",
+      width: 56,
+      render: (_, span) => (
+        <Tooltip title="勾选后该片段不参与脱敏">
+          <Checkbox
+            checked={ignoredKeys.includes(spanKey(span))}
+            disabled={!onToggleIgnore}
+            onChange={() => onToggleIgnore?.(span)}
+          />
+        </Tooltip>
+      ),
+    },
     {
       title: "类型",
       dataIndex: "type_code",
@@ -114,12 +147,15 @@ export default function DetectionTable({ spans, byCode, loading = false }: Detec
           </Space>
           <Table<Span>
             size="small"
-            rowKey={(span) => `${span.start}-${span.end}-${span.type_code}`}
+            rowKey={spanKey}
+            rowClassName={(span) =>
+              ignoredKeys.includes(spanKey(span)) ? "det-ignored" : ""
+            }
             loading={loading}
             columns={columns}
             dataSource={rows}
             pagination={{ pageSize: 8, size: "small", showSizeChanger: false, hideOnSinglePage: true }}
-            scroll={{ x: 532 }}
+            scroll={{ x: 588 }}
             locale={{
               emptyText: (
                 <Empty

@@ -103,6 +103,8 @@ export const api = {
   },
   documents: {
     list: () => request<DocumentMeta[]>("/documents"),
+    clear: () =>
+      request<{ deleted: number }>("/documents", { method: "DELETE" }),
     get: (id: string) => request<DocumentDetail>(`/documents/${id}`),
     upload: (file: File) => {
       const form = new FormData();
@@ -119,10 +121,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ use_llm: useLlm }),
       }),
-    mask: (id: string, actions: MaskActions, verify = true) =>
+    mask: (id: string, actions: MaskActions, verify = true, ignored: string[] = []) =>
       request<MaskResponse>(`/documents/${id}/mask`, {
         method: "POST",
-        body: JSON.stringify({ actions, verify }),
+        body: JSON.stringify({ actions, verify, ignored }),
       }),
     verify: (id: string) => request<VerifyResult>(`/documents/${id}/verify`, { method: "POST" }),
     compare: (id: string) =>

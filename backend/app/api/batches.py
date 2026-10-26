@@ -16,6 +16,10 @@ async def create_batch(
     require_unlocked(ctx)
     if not files:
         raise HTTPException(400, "请选择文件")
+    if ctx.repo.count_documents() + len(files) > ctx.settings.max_docs:
+        raise HTTPException(
+            409, f"文档数量将超过上限（{ctx.settings.max_docs}），请先清理历史文档"
+        )
     payload = [(file.filename or "upload.txt", await file.read()) for file in files]
     batch_id = ctx.repo.create_batch(len(payload))
     item_ids = [ctx.repo.add_batch_item(batch_id) for _ in payload]

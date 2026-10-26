@@ -8,6 +8,13 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _default_resources() -> Path:
     """源码运行时用 backend/resources，PyInstaller 冻结后优先用 _MEIPASS/resources。"""
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -24,6 +31,7 @@ class Settings:
     resources_dir: Path = field(default_factory=_default_resources)
     app_token: str | None = field(default_factory=lambda: os.environ.get("APP_TOKEN"))
     max_upload_mb: int = 20
+    max_docs: int = field(default_factory=lambda: _env_int("PRIVACY_DESK_MAX_DOCS", 100))
     chunk_size: int = 2000
     chunk_overlap: int = 100
     llm_base_url: str = field(

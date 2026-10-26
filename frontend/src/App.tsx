@@ -184,6 +184,7 @@ export default function App() {
           <WorkbenchPage
             byCode={byCode}
             llmMode={session.status.llm_mode}
+            maxDocs={session.status.max_docs}
             openDocId={pendingDocId}
             onOpenedDoc={handleDocOpened}
           />

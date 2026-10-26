@@ -9,6 +9,8 @@ export interface Span {
   confidence: number;
   source: "rule" | "llm";
   level: Level;
+  /** 用户勾选忽略，不参与脱敏 */
+  ignored?: boolean;
 }
 
 export interface DocumentMeta {
@@ -58,6 +60,7 @@ export interface SessionStatus {
   initialized: boolean;
   unlocked: boolean;
   llm_mode: "online" | "ollama" | "rules";
+  max_docs?: number;
 }
 
 export interface EnvKeyInfo {
@@ -124,6 +127,7 @@ export interface RevealedItem {
 export interface MaskStats {
   detected: number;
   applied: number;
+  ignored?: number;
   mapping?: number;
   elapsed_ms?: number;
 }
@@ -143,4 +147,5 @@ export interface CompareResponse {
   detections: Span[];
   applied: AppliedItem[];
   verify: VerifyResult;
+  ignored?: string[];
 }

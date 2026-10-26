@@ -29,6 +29,8 @@ const MODE_META: Record<SessionStatus["llm_mode"], { label: string; color: strin
 
 type Stage = "detection" | "mask" | "compare";
 
+const spanKey = (span: Span) => `${span.start}-${span.end}-${span.type_code}`;
+
 const STAGE_INDEX: Record<Stage, number> = { detection: 0, mask: 1, compare: 2 };
 const STAGE_TITLE: Record<Stage, string> = {
   detection: "识别结果",
@@ -39,6 +41,7 @@ const STAGE_TITLE: Record<Stage, string> = {
 interface WorkbenchPageProps {
   byCode: Record<string, TypeDefinition>;
   llmMode: SessionStatus["llm_mode"];
+  maxDocs?: number;
   /** 由外部（如批量页）指定要打开的文档 */
   openDocId?: string | null;
   /** 文档选中后清除外部指定 */
@@ -48,6 +51,7 @@ interface WorkbenchPageProps {
 export default function WorkbenchPage({
   byCode,
   llmMode,
+  maxDocs,
   openDocId = null,
   onOpenedDoc,
 }: WorkbenchPageProps) {
@@ -58,6 +62,7 @@ export default function WorkbenchPage({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [spans, setSpans] = useState<Span[]>([]);
+  const [ignoredKeys, setIgnoredKeys] = useState<string[]>([]);
   const [mode, setMode] = useState<string | null>(null);
   const [maskedText, setMaskedText] = useState<string | null>(null);
   const [applied, setApplied] = useState<AppliedItem[]>([]);
@@ -67,6 +72,7 @@ export default function WorkbenchPage({
   const [detecting, setDetecting] = useState(false);
   const [masking, setMasking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const selectedIdRef = useRef<string | null>(selectedId);
   const autoDetectedRef = useRef<Set<string>>(new Set());
@@ -106,6 +112,27 @@ export default function WorkbenchPage({
     setMaskStats(null);
   };
 
+  const handleClearDocuments = async () => {
+    setClearing(true);
+    try {
+      const result = await api.documents.clear();
+      setSelectedId(null);
+      setDetail(null);
+      setSpans([]);
+      setIgnoredKeys([]);
+      setMode(null);
+      clearMask();
+      setStage("detection");
+      setDocuments([]);
+      autoDetectedRef.current.clear();
+      message.success(`已清空 ${result.deleted} 份历史文档`);
+    } catch (exc) {
+      message.error(errorText(exc));
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const runDetect = async (docId: string): Promise<boolean> => {
     setDetecting(true);
     try {
@@ -113,6 +140,7 @@ export default function WorkbenchPage({
       void loadDocuments();
       if (selectedIdRef.current !== docId) return true;
       setSpans(result.spans);
+      setIgnoredKeys([]);
       setMode(result.mode);
       clearMask();
       setStage("detection");
@@ -150,6 +178,7 @@ export default function WorkbenchPage({
         setMaskedText(comparison.masked);
         setApplied(comparison.applied ?? []);
         setVerify(comparison.verify ?? null);
+        setIgnoredKeys(comparison.ignored ?? []);
         return true;
       } catch {
         return false;
@@ -162,6 +191,7 @@ export default function WorkbenchPage({
     if (!selectedId) {
       setDetail(null);
       setSpans([]);
+      setIgnoredKeys([]);
       clearMask();
       setMode(null);
       setStage("detection");
@@ -171,6 +201,7 @@ export default function WorkbenchPage({
     let cancelled = false;
     setDetail(null);
     setSpans([]);
+    setIgnoredKeys([]);
     clearMask();
     setMode(null);
     setStage("detection");
@@ -207,14 +238,26 @@ export default function WorkbenchPage({
     [spans],
   );
   const llmCount = spans.length - ruleCount;
+  const ignoredSet = useMemo(() => new Set(ignoredKeys), [ignoredKeys]);
+  const activeSpans = useMemo(
+    () => spans.filter((span) => !ignoredSet.has(spanKey(span))),
+    [spans, ignoredSet],
+  );
   const canMask = Boolean(
-    detail && detail.status !== "uploaded" && spans.length > 0 && !detecting,
+    detail && detail.status !== "uploaded" && activeSpans.length > 0 && !detecting,
   );
 
   const handleUploaded = (doc: DocumentMeta) => {
     setDocuments((prev) => [doc, ...prev.filter((item) => item.id !== doc.id)]);
     setSelectedId(doc.id);
     void loadDocuments();
+  };
+
+  const toggleIgnore = (span: Span) => {
+    const key = spanKey(span);
+    setIgnoredKeys((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key],
+    );
   };
 
   const handleMask = async (actions: MaskActions) => {
@@ -226,7 +269,7 @@ export default function WorkbenchPage({
     const docId = selectedId;
     setMasking(true);
     try {
-      const result = await api.documents.mask(docId, actions, true);
+      const result = await api.documents.mask(docId, actions, true, ignoredKeys);
       void loadDocuments();
       const updated = await api.documents.get(docId).catch(() => null);
       if (selectedIdRef.current !== docId) return;
@@ -320,6 +363,9 @@ export default function WorkbenchPage({
             documents={documents}
             selectedId={selectedId}
             loading={listLoading}
+            maxDocs={maxDocs}
+            clearing={clearing}
+            onClear={() => void handleClearDocuments()}
             onSelect={setSelectedId}
           />
         </div>
@@ -350,12 +396,18 @@ export default function WorkbenchPage({
 
           <div className="workbench-stage">
             <div style={{ display: stage === "detection" ? undefined : "none" }}>
-              <DetectionTable spans={spans} byCode={byCode} loading={detecting} />
+              <DetectionTable
+                spans={spans}
+                byCode={byCode}
+                loading={detecting}
+                ignoredKeys={ignoredKeys}
+                onToggleIgnore={toggleIgnore}
+              />
             </div>
 
             <div style={{ display: stage === "mask" ? undefined : "none" }}>
               <MaskPanel
-                spans={spans}
+                spans={activeSpans}
                 byCode={byCode}
                 disabled={!canMask}
                 loading={masking}

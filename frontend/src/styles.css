@@ -487,3 +487,7 @@ mark.mask-replacement {
   gap: 12px;
   width: 100%;
 }
+/* 识别结果中被忽略的片段 */
+.det-ignored > td {
+  opacity: 0.45;
+}

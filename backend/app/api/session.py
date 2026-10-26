@@ -35,6 +35,7 @@ def _status(ctx: AppContext) -> dict:
         "initialized": _meta_get(ctx, "salt") is not None,
         "unlocked": ctx.vault.unlocked,
         "llm_mode": ctx.llm_service.mode(),
+        "max_docs": ctx.settings.max_docs,
     }
 
 

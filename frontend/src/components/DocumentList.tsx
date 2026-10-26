@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Card, Empty, Pagination, Spin, Tag, Tooltip, Typography } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import {
+  Button,
+  Card,
+  Empty,
+  Pagination,
+  Popconfirm,
+  Space,
+  Spin,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import type { DocumentMeta } from "../types";
 import StatusTag from "./StatusTag";
 
@@ -10,6 +22,9 @@ interface DocumentListProps {
   documents: DocumentMeta[];
   selectedId: string | null;
   loading?: boolean;
+  maxDocs?: number;
+  clearing?: boolean;
+  onClear?: () => void;
   onSelect: (id: string) => void;
 }
 
@@ -29,6 +44,9 @@ export default function DocumentList({
   documents,
   selectedId,
   loading = false,
+  maxDocs,
+  clearing = false,
+  onClear,
   onSelect,
 }: DocumentListProps) {
   const [page, setPage] = useState(1);
@@ -47,7 +65,32 @@ export default function DocumentList({
       size="small"
       className="doc-list-card"
       title="文档列表"
-      extra={<span className="list-count">{documents.length}</span>}
+      extra={
+        <Space size={8}>
+          <span className="list-count">
+            {documents.length}
+            {maxDocs ? ` / ${maxDocs}` : ""}
+          </span>
+          {documents.length > 0 && onClear ? (
+            <Popconfirm
+              title="清空全部文档？"
+              description="原文、识别结果、脱敏结果和报告都会被删除，且无法恢复。"
+              okText="清空"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={onClear}
+            >
+              <Button
+                size="small"
+                icon={<DeleteOutlined />}
+                loading={clearing}
+              >
+                清空历史
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      }
     >
       <div className="doc-list">
         {documents.length === 0 ? (

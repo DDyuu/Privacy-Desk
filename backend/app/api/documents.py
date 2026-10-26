@@ -25,6 +25,7 @@ class DetectIn(BaseModel):
 class MaskIn(BaseModel):
     actions: dict[str, dict] = {}
     verify: bool = True
+    ignored: list[str] = []
 
 
 class EditIn(BaseModel):
@@ -44,12 +45,25 @@ async def upload(
     file: UploadFile = File(...), ctx: AppContext = Depends(get_context)
 ) -> dict:
     require_unlocked(ctx)
+    if ctx.repo.count_documents() >= ctx.settings.max_docs:
+        raise HTTPException(
+            409, f"文档数量已达上限（{ctx.settings.max_docs}），请先清理历史文档"
+        )
     raw = await file.read()
     try:
         doc_id = pipeline.create_document_from_bytes(ctx, file.filename or "upload.txt", raw)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return ctx.repo.get_document(doc_id)
+
+
+@router.delete("")
+def clear_documents(ctx: AppContext = Depends(get_context)) -> dict:
+    """清空全部历史文档及其识别、脱敏和报告数据。"""
+    require_unlocked(ctx)
+    deleted = ctx.repo.delete_all_documents()
+    ctx.repo.audit("document.clear", {"deleted": deleted})
+    return {"deleted": deleted}
 
 
 @router.get("")
@@ -107,7 +121,9 @@ def mask(
 ) -> dict:
     require_unlocked(ctx)
     try:
-        result = pipeline.mask_document(ctx, doc_id, payload.actions, payload.verify)
+        result = pipeline.mask_document(
+            ctx, doc_id, payload.actions, payload.verify, set(payload.ignored)
+        )
     except KeyError as exc:
         raise _not_found() from exc
     except ValueError as exc:

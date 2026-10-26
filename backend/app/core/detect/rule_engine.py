@@ -16,6 +16,7 @@ class Span:
     confidence: float
     source: str
     level: str = "medium"
+    ignored: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -26,6 +27,7 @@ class Span:
             "confidence": round(self.confidence, 3),
             "source": self.source,
             "level": self.level,
+            "ignored": self.ignored,
         }
 
 

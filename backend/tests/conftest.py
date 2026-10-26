@@ -8,7 +8,12 @@ from app.main import create_app
 @pytest.fixture(autouse=True)
 def clear_llm_env(monkeypatch):
     """避免开发机上的环境变量干扰配置相关断言。"""
-    for name in ("PRIVACY_DESK_LLM_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY"):
+    for name in (
+        "PRIVACY_DESK_LLM_KEY",
+        "DEEPSEEK_API_KEY",
+        "OPENAI_API_KEY",
+        "PRIVACY_DESK_MAX_DOCS",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 

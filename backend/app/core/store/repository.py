@@ -151,6 +151,18 @@ class Repository:
             for row in rows
         ]
 
+    def count_documents(self) -> int:
+        with self._db.connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM documents").fetchone()
+        return int(row["count"])
+
+    def delete_all_documents(self) -> int:
+        """清空全部文档；版本、识别、脱敏、报告由外键级联删除。"""
+        with self._db.connect() as conn:
+            conn.execute("UPDATE batch_items SET doc_id=NULL")
+            deleted = conn.execute("DELETE FROM documents").rowcount
+        return int(deleted)
+
     def update_status(self, doc_id: str, status: str) -> None:
         with self._db.connect() as conn:
             conn.execute(

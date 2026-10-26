@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.core.detect.rule_engine import RuleEngine, Span
 from app.core.detect.types import TypeRegistry
@@ -27,9 +27,24 @@ class Verifier:
         self._registry = registry
         self._rule_engine = rule_engine
 
-    def verify(self, original_text: str, masked_text: str) -> VerifyResult:
+    def verify(
+        self,
+        original_text: str,
+        masked_text: str,
+        ignored_spans: list[Span] | None = None,
+    ) -> VerifyResult:
         residuals = self._rule_engine.detect(masked_text)
-        high = [span for span in residuals if span.level == "high"]
+        ignored_texts = [span.text for span in (ignored_spans or []) if span.text]
+        if ignored_texts:
+            # 用户明确排除的片段仍留在正文里，不能算作残留
+            residuals = [
+                replace(span, ignored=True)
+                if span.text and any(span.text in text for text in ignored_texts)
+                else span
+                for span in residuals
+            ]
+        effective = [span for span in residuals if not span.ignored]
+        high = [span for span in effective if span.level == "high"]
         ratio = len(masked_text) / max(len(original_text), 1)
         marker_count = sum(masked_text.count(char) for char in ("█", "*", "[", "ENC:"))
         density = marker_count / max(len(masked_text), 1)
@@ -43,7 +58,7 @@ class Verifier:
         metrics = {
             "ratio": round(ratio, 3),
             "placeholder_density": round(density, 3),
-            "residual_count": len(residuals),
+            "residual_count": len(effective),
             "high_risk_residual_count": len(high),
         }
         return VerifyResult(

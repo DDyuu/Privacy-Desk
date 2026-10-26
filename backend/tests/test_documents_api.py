@@ -1,3 +1,10 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.main import create_app
+
+
 def test_full_document_flow(unlocked_client):
     client = unlocked_client
     content = "联系人张三，电话13800138000，身份证11010519491231002X。".encode("utf-8")
@@ -88,6 +95,78 @@ def test_reveal_encrypted_tokens_requires_password(unlocked_client):
     assert [item["text"] for item in items] == ["13800138000"]
     assert items[0]["type_code"] == "PHONE_CN"
     assert "13800138000" not in items[0]["token"]
+
+
+def test_mask_can_ignore_selected_span(unlocked_client):
+    client = unlocked_client
+    text = "电话13800138000，备用13900139000"
+    upload = client.post(
+        "/api/v1/documents",
+        files={"file": ("phones.txt", text.encode("utf-8"), "text/plain")},
+    )
+    doc_id = upload.json()["id"]
+    client.post(f"/api/v1/documents/{doc_id}/detect", json={"use_llm": False})
+    detections = client.get(f"/api/v1/documents/{doc_id}").json()["detections"]
+    phones = [item for item in detections if item["type_code"] == "PHONE_CN"]
+    assert len(phones) == 2
+
+    kept = phones[0]
+    masked = client.post(
+        f"/api/v1/documents/{doc_id}/mask",
+        json={
+            "actions": {},
+            "verify": True,
+            "ignored": [f"{kept['start']}-{kept['end']}-{kept['type_code']}"],
+        },
+    )
+    assert masked.status_code == 200
+    body = masked.json()
+    assert kept["text"] in body["masked_text"]
+    assert phones[1]["text"] not in body["masked_text"]
+    assert body["stats"]["ignored"] == 1
+    assert body["stats"]["applied"] == 1
+    assert body["verify"]["passed"] is True
+
+    again = client.post(f"/api/v1/documents/{doc_id}/verify")
+    assert again.json()["passed"] is True
+
+
+def test_clear_documents_removes_history(unlocked_client):
+    client = unlocked_client
+    upload = client.post(
+        "/api/v1/documents",
+        files={"file": ("a.txt", "电话13800138000".encode("utf-8"), "text/plain")},
+    )
+    doc_id = upload.json()["id"]
+    client.post(f"/api/v1/documents/{doc_id}/detect", json={"use_llm": False})
+
+    cleared = client.delete("/api/v1/documents")
+    assert cleared.status_code == 200
+    assert cleared.json()["deleted"] == 1
+    assert client.get("/api/v1/documents").json() == []
+    assert client.get(f"/api/v1/documents/{doc_id}").status_code == 404
+
+    ctx = client.app.state.ctx
+    assert ctx.repo.get_detections(doc_id) == []
+    with pytest.raises(KeyError):
+        ctx.repo.get_text(doc_id, "original")
+
+
+def test_document_limit_rejects_upload(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path, llm_api_key=None, max_docs=1))
+    client = TestClient(app)
+    setup = client.post("/api/v1/session/setup", json={"password": "password123"})
+    assert setup.status_code == 200
+
+    first = client.post(
+        "/api/v1/documents", files={"file": ("a.txt", b"hello", "text/plain")}
+    )
+    assert first.status_code == 200
+    second = client.post(
+        "/api/v1/documents", files={"file": ("b.txt", b"world", "text/plain")}
+    )
+    assert second.status_code == 409
+    assert "上限" in second.json()["detail"]
 
 
 def test_edit_content_and_reject_unsupported(unlocked_client):

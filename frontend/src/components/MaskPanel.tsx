@@ -177,7 +177,9 @@ export default function MaskPanel({
 
       {stats ? (
         <div className="mask-stats">
-          识别 {stats.detected} 处 · 脱敏 {stats.applied} 处 · 耗时 {stats.elapsed_ms ?? 0} ms
+          识别 {stats.detected} 处 · 脱敏 {stats.applied} 处
+          {stats.ignored ? ` · 忽略 ${stats.ignored} 处` : ""} · 耗时{" "}
+          {stats.elapsed_ms ?? 0} ms
         </div>
       ) : null}
 
