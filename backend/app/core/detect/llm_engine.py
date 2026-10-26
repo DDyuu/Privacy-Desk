@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 
 from app.core.detect.chunking import chunk_text
 from app.core.detect.pre_redact import pre_redact
@@ -13,6 +14,24 @@ from app.llm.client import BaseLLM
 MIN_FRAGMENT_LEN = 2
 MAX_HITS_PER_FRAGMENT = 20
 MAX_SPANS = 500
+
+_LABEL_SEPARATOR = re.compile(r"^[\u4e00-\u9fa5]{2,8}\s*[:：=＝\-—]\s*")
+_LABEL_BEFORE_ASCII = re.compile(r"^[\u4e00-\u9fa5]{2,8}(?=[A-Za-z0-9])")
+_CHINESE = re.compile(r"[\u4e00-\u9fa5]")
+
+
+def _trim_field_label(fragment: str) -> str:
+    """模型偶尔把字段名一起返回（如“密钥sk-...”），这里只保留字段值。"""
+    trimmed = _LABEL_SEPARATOR.sub("", fragment, count=1)
+    if trimmed != fragment and len(trimmed) >= MIN_FRAGMENT_LEN:
+        return trimmed
+    matched = _LABEL_BEFORE_ASCII.match(fragment)
+    if matched:
+        rest = fragment[matched.end() :]
+        # 值部分不再包含中文时才认为是“标签+值”，避免把地址里的地名截掉
+        if len(rest) >= MIN_FRAGMENT_LEN and not _CHINESE.search(rest):
+            return rest
+    return fragment
 
 
 class LLMEngine:
@@ -79,7 +98,7 @@ class LLMEngine:
                     self._cache[key] = items
             for item in items:
                 code = str(item.get("type") or "")
-                fragment = str(item.get("text") or "").strip()
+                fragment = _trim_field_label(str(item.get("text") or "").strip())
                 if (
                     code not in allowed
                     or len(fragment) < MIN_FRAGMENT_LEN

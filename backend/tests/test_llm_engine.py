@@ -53,6 +53,39 @@ def test_llm_engine_returns_empty_when_unavailable():
     assert engine.detect("张三", []) == []
 
 
+def test_llm_engine_trims_field_labels_from_fragments():
+    class LabeledLLM(BaseLLM):
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            return [
+                {"type": "NAME_CN", "text": "姓名:张三", "confidence": 0.9},
+                {"type": "SECRET_INFO", "text": "密钥sk-test-123456", "confidence": 0.9},
+            ]
+
+    text = "姓名:张三\n密钥sk-test-123456"
+    spans = LLMEngine(LabeledLLM(), load_builtin_types(RESOURCES)).detect(text, [])
+    texts = {text[item.start : item.end] for item in spans}
+    assert "张三" in texts
+    assert "sk-test-123456" in texts
+    assert "姓名:张三" not in texts
+    assert "密钥sk-test-123456" not in texts
+
+
+def test_llm_engine_keeps_address_with_digits():
+    class AddressLLM(BaseLLM):
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            return [{"type": "ADDRESS_CN", "text": "北京市朝阳区1号", "confidence": 0.9}]
+
+    text = "地址：北京市朝阳区1号"
+    spans = LLMEngine(AddressLLM(), load_builtin_types(RESOURCES)).detect(text, [])
+    assert [text[item.start : item.end] for item in spans] == ["北京市朝阳区1号"]
+
+
 def test_llm_engine_skips_whitespace_and_single_char_fragments():
     class BadLLM(BaseLLM):
         def available(self):
