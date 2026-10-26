@@ -59,6 +59,37 @@ def test_full_document_flow(unlocked_client):
     assert "13800138000" not in exported.text
 
 
+def test_reveal_encrypted_tokens_requires_password(unlocked_client):
+    client = unlocked_client
+    upload = client.post(
+        "/api/v1/documents",
+        files={"file": ("secret.txt", "电话13800138000".encode("utf-8"), "text/plain")},
+    )
+    doc_id = upload.json()["id"]
+    client.post(f"/api/v1/documents/{doc_id}/detect", json={"use_llm": False})
+    masked = client.post(
+        f"/api/v1/documents/{doc_id}/mask",
+        json={"actions": {"PHONE_CN": {"action": "encrypt"}}, "verify": True},
+    )
+    assert masked.status_code == 200
+    assert "ENC:" in masked.json()["masked_text"]
+
+    assert client.post(f"/api/v1/documents/{doc_id}/reveal", json={}).status_code == 401
+    wrong = client.post(
+        f"/api/v1/documents/{doc_id}/reveal", json={"password": "wrong-pass"}
+    )
+    assert wrong.status_code == 403
+
+    ok = client.post(
+        f"/api/v1/documents/{doc_id}/reveal", json={"password": "password123"}
+    )
+    assert ok.status_code == 200
+    items = ok.json()["items"]
+    assert [item["text"] for item in items] == ["13800138000"]
+    assert items[0]["type_code"] == "PHONE_CN"
+    assert "13800138000" not in items[0]["token"]
+
+
 def test_edit_content_and_reject_unsupported(unlocked_client):
     client = unlocked_client
     upload = client.post(

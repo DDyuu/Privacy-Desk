@@ -5,16 +5,18 @@ import {
   SettingOutlined,
   TagsOutlined,
   ThunderboltOutlined,
+  UnlockOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Tag, Tooltip } from "antd";
 import type { SessionStatus } from "../types";
 
-export type PageKey = "workbench" | "batch" | "types" | "settings";
+export type PageKey = "workbench" | "batch" | "types" | "reveal" | "settings";
 
 const PAGE_TITLES: Record<PageKey, string> = {
   workbench: "文档脱敏",
   batch: "批量处理",
   types: "类型库",
+  reveal: "解密 ENC",
   settings: "设置",
 };
 
@@ -55,6 +57,7 @@ export default function AppLayout({ status, page, onPageChange, onLock, children
       { key: "workbench", icon: <FileProtectOutlined />, label: "文档脱敏" },
       { key: "batch", icon: <ThunderboltOutlined />, label: "批量处理" },
       { key: "types", icon: <TagsOutlined />, label: "类型库" },
+      { key: "reveal", icon: <UnlockOutlined />, label: "解密 ENC" },
       { key: "settings", icon: <SettingOutlined />, label: "设置" },
     ],
     [],

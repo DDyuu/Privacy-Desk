@@ -7,6 +7,7 @@ import type {
   MaskActions,
   MaskResponse,
   OllamaStatus,
+  RevealedItem,
   SessionStatus,
   Span,
   TypeDefinition,
@@ -126,6 +127,11 @@ export const api = {
     verify: (id: string) => request<VerifyResult>(`/documents/${id}/verify`, { method: "POST" }),
     compare: (id: string) =>
       request<CompareResponse>(`/documents/${id}/compare`),
+    reveal: (id: string, password: string) =>
+      request<{ items: RevealedItem[] }>(`/documents/${id}/reveal`, {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      }),
     download: async (id: string, kind: "masked" | "report", fmt: string, password?: string) => {
       const query = new URLSearchParams({ kind, fmt });
       if (password) query.set("password", password);

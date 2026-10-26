@@ -16,6 +16,7 @@ from app.core.ingest.registry import load_document
 from app.core.mask.engine import MaskEngine
 from app.core.mask.verifier import Verifier
 from app.core.report.builder import build_json_report, build_pdf_report
+from app.core.security import crypto
 
 if TYPE_CHECKING:
     from app.context import AppContext
@@ -183,6 +184,36 @@ def compare_document(ctx: "AppContext", doc_id: str) -> dict:
         "applied": applied,
         "verify": verify_result.to_dict(),
     }
+
+
+def reveal_encrypted(ctx: "AppContext", doc_id: str) -> list[dict]:
+    """解密指定文档里使用“加密”方式生成的 ENC 令牌。"""
+    try:
+        applied = json.loads(ctx.repo.get_text(doc_id, "applied"))
+    except KeyError:
+        applied = []
+    key = ctx.vault.data_key()
+    items: list[dict] = []
+    for entry in applied:
+        if entry.get("action") != "encrypt":
+            continue
+        token = str(entry.get("replacement") or "")
+        if not token.startswith("ENC:"):
+            continue
+        aad = f"{doc_id}:{entry.get('type_code', '')}:{entry.get('start', 0)}".encode("utf-8")
+        try:
+            plain = crypto.decrypt(key, crypto.b64url_decode(token[4:]), aad).decode("utf-8")
+        except Exception:
+            continue
+        items.append(
+            {
+                "token": token,
+                "type_code": entry.get("type_code", ""),
+                "start": entry.get("start", 0),
+                "text": plain,
+            }
+        )
+    return items
 
 
 def verify_document(ctx: "AppContext", doc_id: str) -> dict:

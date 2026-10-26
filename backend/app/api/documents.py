@@ -31,6 +31,10 @@ class EditIn(BaseModel):
     text: str
 
 
+class RevealIn(BaseModel):
+    password: str | None = None
+
+
 def _not_found() -> HTTPException:
     return HTTPException(404, "文档不存在")
 
@@ -134,6 +138,24 @@ def compare(doc_id: str, ctx: AppContext = Depends(get_context)) -> dict:
         return pipeline.compare_document(ctx, doc_id)
     except KeyError as exc:
         raise HTTPException(404, "文档或脱敏结果不存在") from exc
+
+
+@router.post("/{doc_id}/reveal")
+def reveal(
+    doc_id: str, payload: RevealIn, ctx: AppContext = Depends(get_context)
+) -> dict:
+    """解密该文档中以“加密”方式处理的 ENC 令牌，需再次校验主密码。"""
+    require_unlocked(ctx)
+    verify_password(ctx, payload.password, "解密 ENC 令牌")
+    try:
+        document = ctx.repo.get_document(doc_id)
+    except KeyError as exc:
+        raise _not_found() from exc
+    if document["status"] in {"uploaded", "detected"}:
+        raise HTTPException(409, "尚未完成脱敏")
+    items = pipeline.reveal_encrypted(ctx, doc_id)
+    ctx.repo.audit("document.reveal", {"doc_id": doc_id, "count": len(items)})
+    return {"items": items}
 
 
 @router.get("/{doc_id}/export")

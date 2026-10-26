@@ -113,6 +113,14 @@ export interface AppliedItem {
   replacement: string;
 }
 
+/** 解密 ENC 令牌后返回的原文片段 */
+export interface RevealedItem {
+  token: string;
+  type_code: string;
+  start: number;
+  text: string;
+}
+
 export interface MaskStats {
   detected: number;
   applied: number;

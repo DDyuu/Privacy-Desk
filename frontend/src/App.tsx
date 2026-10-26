@@ -6,6 +6,7 @@ import { useSession } from "./hooks/useSession";
 import { useTypes } from "./hooks/useTypes";
 import BatchPage from "./pages/BatchPage";
 import LockPage from "./pages/LockPage";
+import RevealPage from "./pages/RevealPage";
 import SettingsPage from "./pages/SettingsPage";
 import TypesPage from "./pages/TypesPage";
 import WorkbenchPage from "./pages/WorkbenchPage";
@@ -191,6 +192,7 @@ export default function App() {
         {page === "types" ? (
           <TypesPage types={types} loading={typesLoading} onRefresh={refreshTypes} />
         ) : null}
+        {page === "reveal" ? <RevealPage byCode={byCode} /> : null}
         {page === "settings" ? <SettingsPage onSessionRefresh={session.refresh} /> : null}
       </AppLayout>
     </>
