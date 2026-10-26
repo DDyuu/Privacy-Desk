@@ -1,7 +1,6 @@
 :root {
   --brand: #0f766e;
   --ink: #0b1220;
-  --titlebar: #1b2a44;
   --titlebar-height: 36px;
   --muted: #64748b;
   --bg: #f5f7fa;
@@ -28,26 +27,27 @@ body {
   align-items: center;
   height: env(titlebar-area-height, var(--titlebar-height));
   padding: 0 20px;
-  background: var(--titlebar);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-  color: #e2e8f0;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
   -webkit-app-region: drag;
   user-select: none;
 }
 .titlebar-slogan {
   font-size: 12px;
   letter-spacing: 1px;
-  color: #94a3b8;
+  color: var(--muted);
 }
 .app-shell {
   min-height: 100vh;
   padding-top: env(titlebar-area-height, var(--titlebar-height));
 }
 .app-sider {
-  background: var(--ink) !important;
+  background: #ffffff !important;
+  border-right: 1px solid var(--border);
 }
 .brand {
-  color: #fff;
+  color: var(--ink);
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -55,7 +55,7 @@ body {
 }
 .brand small {
   display: block;
-  color: #94a3b8;
+  color: var(--muted);
   font-weight: 400;
   font-size: 11px;
   letter-spacing: 2px;
@@ -119,7 +119,9 @@ mark.hit-low {
   flex: 1;
 }
 .app-sider .ant-menu-item-selected {
-  background-color: var(--brand) !important;
+  background-color: #ecfdf5 !important;
+  color: var(--brand) !important;
+  font-weight: 600;
 }
 
 /* 顶栏 */
@@ -160,15 +162,15 @@ mark.hit-low {
   padding: 24px;
   padding-top: calc(env(titlebar-area-height, var(--titlebar-height)) + 24px);
   background:
-    radial-gradient(circle at 15% 15%, rgba(15, 118, 110, 0.28), transparent 42%),
-    radial-gradient(circle at 85% 85%, rgba(30, 64, 175, 0.22), transparent 45%),
-    var(--ink);
+    radial-gradient(circle at 15% 15%, rgba(15, 118, 110, 0.12), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(30, 64, 175, 0.08), transparent 48%),
+    var(--bg);
 }
 .lock-card {
   width: 100%;
   max-width: 420px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.55);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
 }
 .lock-brand {
   display: flex;

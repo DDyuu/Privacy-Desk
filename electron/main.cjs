@@ -233,8 +233,8 @@ function createWindow(port, token) {
     // 隐藏系统标题栏，窗口控制按钮以覆盖层形式保留在右上角
     titleBarStyle: "hidden",
     titleBarOverlay: {
-      color: "#1b2a44",
-      symbolColor: "#e2e8f0",
+      color: "#ffffff",
+      symbolColor: "#334155",
       height: TITLEBAR_HEIGHT,
     },
     webPreferences: {

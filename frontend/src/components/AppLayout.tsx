@@ -62,13 +62,13 @@ export default function AppLayout({ status, page, onPageChange, onLock, children
 
   return (
     <Layout className="app-shell">
-      <Layout.Sider width={208} className="app-sider" theme="dark">
+      <Layout.Sider width={208} className="app-sider" theme="light">
         <div className="brand">
           隐盾
           <small>PRIVACY DESK</small>
         </div>
         <Menu
-          theme="dark"
+          theme="light"
           mode="inline"
           selectedKeys={[page]}
           items={menuItems}
