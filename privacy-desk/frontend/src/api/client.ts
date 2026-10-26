@@ -6,6 +6,7 @@ import type {
   LLMConfig,
   MaskActions,
   MaskResponse,
+  OllamaStatus,
   SessionStatus,
   Span,
   TypeDefinition,
@@ -160,6 +161,13 @@ export const api = {
         "/settings/llm/test",
         { method: "POST" },
       ),
+    ollamaStatus: (url?: string, model?: string) => {
+      const query = new URLSearchParams();
+      if (url) query.set("url", url);
+      if (model) query.set("model", model);
+      const suffix = query.toString();
+      return request<OllamaStatus>(`/settings/ollama/status${suffix ? `?${suffix}` : ""}`);
+    },
   },
   batches: {
     create: (files: File[]) => {

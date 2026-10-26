@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.api.deps import get_context, require_unlocked
 from app.context import AppContext
+from app.llm.client import probe_ollama
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -46,6 +47,22 @@ def put_llm(payload: LLMConfig, ctx: AppContext = Depends(get_context)) -> dict:
     ctx.llm_service.set_config(config)
     ctx.repo.audit("settings.llm", {"mode": config["mode"]})
     return _public(config)
+
+
+@router.get("/ollama/status")
+def ollama_status(
+    url: str | None = None,
+    model: str | None = None,
+    ctx: AppContext = Depends(get_context),
+) -> dict:
+    """检测 Ollama 服务连通性；url/model 缺省时使用已保存配置。"""
+    require_unlocked(ctx)
+    config = ctx.llm_service.config()
+    target = url if url is not None else config.get("ollama_url", "")
+    target_model = model if model is not None else config.get("ollama_model", "")
+    result = probe_ollama(str(target), str(target_model))
+    result["url"] = str(target)
+    return result
 
 
 @router.post("/llm/test")

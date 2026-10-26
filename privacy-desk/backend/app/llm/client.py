@@ -134,6 +134,60 @@ class OpenAICompatLLM(BaseLLM):
         raise LLMError(f"在线模型调用失败：{last_error}") from last_error
 
 
+def probe_ollama(
+    base_url: str,
+    model: str = "",
+    timeout: float = 2.0,
+    client: httpx.Client | None = None,
+) -> dict:
+    """探测本机 Ollama 服务是否可连，并返回已拉取的模型列表。"""
+    target = (base_url or "").strip().rstrip("/")
+    if not target:
+        return {
+            "reachable": False,
+            "models": [],
+            "model_present": False,
+            "message": "请先填写 Ollama 地址",
+        }
+
+    owns_client = client is None
+    http_client = client or httpx.Client(timeout=timeout)
+    try:
+        response = http_client.get(f"{target}/api/tags")
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        return {
+            "reachable": False,
+            "models": [],
+            "model_present": False,
+            "message": f"无法连接 {target}：{exc}",
+        }
+    finally:
+        if owns_client:
+            http_client.close()
+
+    raw_models = payload.get("models") if isinstance(payload, dict) else None
+    models = [
+        item["name"]
+        for item in (raw_models or [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    wanted = (model or "").strip()
+    model_present = bool(wanted) and any(
+        name == wanted or name.startswith(f"{wanted}:") for name in models
+    )
+    message = ""
+    if wanted and not model_present:
+        message = f"服务已连接，但未找到模型 {wanted}，请执行 ollama pull {wanted}"
+    return {
+        "reachable": True,
+        "models": models,
+        "model_present": model_present,
+        "message": message,
+    }
+
+
 class OllamaLLM(BaseLLM):
     name = "ollama"
 

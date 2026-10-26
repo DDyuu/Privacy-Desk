@@ -94,6 +94,28 @@ def test_llm_test_returns_false_in_rules_mode(unlocked_client):
     assert response.json()["mode"] == "rules"
 
 
+def test_ollama_status_accepts_query_override(unlocked_client, monkeypatch):
+    from app.api import settings as settings_api
+
+    captured = {}
+
+    def fake_probe(url, model, **kwargs):
+        captured["url"] = url
+        captured["model"] = model
+        return {"reachable": False, "models": [], "model_present": False, "message": "stub"}
+
+    monkeypatch.setattr(settings_api, "probe_ollama", fake_probe)
+    response = unlocked_client.get(
+        "/api/v1/settings/ollama/status",
+        params={"url": "http://127.0.0.1:9999", "model": "qwen2.5:7b"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reachable"] is False
+    assert body["url"] == "http://127.0.0.1:9999"
+    assert captured == {"url": "http://127.0.0.1:9999", "model": "qwen2.5:7b"}
+
+
 def test_batch_processes_all_files(unlocked_client):
     client = unlocked_client
     files = [

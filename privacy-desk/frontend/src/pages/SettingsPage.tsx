@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   App,
@@ -13,7 +13,7 @@ import {
   Typography,
 } from "antd";
 import { api, errorText } from "../api/client";
-import type { LLMConfig } from "../types";
+import type { LLMConfig, OllamaStatus } from "../types";
 
 const MODE_OPTIONS: Array<{ value: LLMConfig["mode"]; label: string }> = [
   { value: "online", label: "在线 API" },
@@ -60,6 +60,9 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [hasKey, setHasKey] = useState(false);
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
+  const [checkingOllama, setCheckingOllama] = useState(false);
+  const ollamaCheckedRef = useRef<string | null>(null);
 
   const loadConfig = async () => {
     setLoading(true);
@@ -88,6 +91,32 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const checkOllama = async () => {
+    setCheckingOllama(true);
+    try {
+      const url = (form.getFieldValue("ollama_url") as string | undefined) ?? "";
+      const model = (form.getFieldValue("ollama_model") as string | undefined) ?? "";
+      setOllamaStatus(await api.settings.ollamaStatus(url, model));
+    } catch (exc) {
+      setOllamaStatus(null);
+      message.error(errorText(exc));
+    } finally {
+      setCheckingOllama(false);
+    }
+  };
+
+  useEffect(() => {
+    if (watchedMode !== "ollama") {
+      ollamaCheckedRef.current = null;
+      return;
+    }
+    if (ollamaCheckedRef.current === "ollama") return;
+    ollamaCheckedRef.current = "ollama";
+    void checkOllama();
+    // 仅在切换到 Ollama 模式时检测一次，地址变化后由“重新检测”按钮触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedMode]);
+
   const handleSave = async () => {
     let values: SettingsFormValues;
     try {
@@ -109,6 +138,10 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
       setHasKey(Boolean(saved.has_key));
       form.setFieldValue("api_key", "");
       message.success("配置已保存");
+      if (values.mode === "ollama") {
+        ollamaCheckedRef.current = null;
+        void checkOllama();
+      }
       await onSessionRefresh();
     } catch (exc) {
       setSaveError(errorText(exc));
@@ -230,6 +263,40 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
             >
               <Input placeholder="qwen2.5:7b" />
             </Form.Item>
+            <Space style={{ marginBottom: 8 }}>
+              <Button size="small" loading={checkingOllama} onClick={() => void checkOllama()}>
+                重新检测
+              </Button>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                检测当前填写的地址与模型
+              </Typography.Text>
+            </Space>
+            {ollamaStatus ? (
+              <Alert
+                style={{ marginBottom: 8 }}
+                type={
+                  ollamaStatus.reachable && ollamaStatus.model_present ? "success" : "warning"
+                }
+                showIcon
+                message={
+                  !ollamaStatus.reachable
+                    ? "未检测到本机 Ollama 服务"
+                    : ollamaStatus.model_present
+                      ? "Ollama 服务可用"
+                      : "Ollama 服务已连接，但缺少模型"
+                }
+                description={
+                  !ollamaStatus.reachable
+                    ? `${ollamaStatus.message}。不安装 Ollama 不影响纯规则模式；需要本地模型时请安装并启动 Ollama。`
+                    : ollamaStatus.model_present
+                      ? `已检测到模型：${ollamaStatus.models.join("、")}`
+                      : ollamaStatus.message ||
+                        `服务已连接，当前可用模型：${
+                          ollamaStatus.models.join("、") || "（暂无）"
+                        }。请检查模型名称。`
+                }
+              />
+            ) : null}
           </div>
 
           {watchedMode === "rules" ? (

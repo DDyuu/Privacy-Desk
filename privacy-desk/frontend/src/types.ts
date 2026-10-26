@@ -68,6 +68,14 @@ export interface LLMConfig {
   has_key?: boolean;
 }
 
+export interface OllamaStatus {
+  url: string;
+  reachable: boolean;
+  models: string[];
+  model_present: boolean;
+  message: string;
+}
+
 export interface BatchStatus {
   id: string;
   status: "running" | "done";
