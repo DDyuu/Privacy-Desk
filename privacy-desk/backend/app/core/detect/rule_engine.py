@@ -51,12 +51,21 @@ class RuleEngine:
             checksum = next(
                 (d.algo for d in definition.detectors if d.kind == "checksum" and d.algo), None
             )
+            strip_chars = next(
+                (d.strip for d in definition.detectors if d.kind == "regex" and d.strip), None
+            )
             candidates: list[tuple[int, int, float]] = []
             for detector in definition.detectors:
                 if detector.kind == "regex" and detector.pattern:
                     flags = re.IGNORECASE if "i" in detector.flags else 0
+                    confidence = 0.9 if detector.confidence is None else detector.confidence
                     for match in re.finditer(detector.pattern, text, flags):
-                        candidates.append((match.start(), match.end(), 0.9))
+                        start, end = match.start(), match.end()
+                        # 宽松规则常把“标签:号码”整体匹配进来，去掉号码前的分隔符
+                        while start < end and text[start] in ":： \t":
+                            start += 1
+                        if start < end:
+                            candidates.append((start, end, confidence))
                 elif detector.kind in ("keyword", "dict"):
                     for word in detector.words:
                         if not word:
@@ -69,7 +78,10 @@ class RuleEngine:
             ):
                 if kept and start < kept[-1][1]:
                     continue
-                if checksum and not validate_checksum(checksum, text[start:end]):
+                target = text[start:end]
+                if strip_chars:
+                    target = target.translate(str.maketrans("", "", strip_chars))
+                if checksum and not validate_checksum(checksum, target):
                     continue
                 kept.append((start, end, confidence))
             for start, end, confidence in kept:

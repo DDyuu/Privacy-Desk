@@ -8,6 +8,8 @@ interface CompareViewProps {
   spans: Span[];
   applied: AppliedItem[];
   byCode: Record<string, TypeDefinition>;
+  /** 嵌入工作台主体时不再套一层 Card */
+  embedded?: boolean;
 }
 
 function spanDetail(span: Span, byCode: Record<string, TypeDefinition>): ReactNode {
@@ -89,9 +91,16 @@ function renderMasked(masked: string, applied: AppliedItem[]): ReactNode[] {
   return nodes;
 }
 
-export default function CompareView({ original, masked, spans, applied, byCode }: CompareViewProps) {
-  return (
-    <Card size="small" title="脱敏对比">
+export default function CompareView({
+  original,
+  masked,
+  spans,
+  applied,
+  byCode,
+  embedded = false,
+}: CompareViewProps) {
+  const body = (
+    <>
       <Alert
         type="info"
         showIcon
@@ -108,6 +117,13 @@ export default function CompareView({ original, masked, spans, applied, byCode }
           <div className="compare-pane mono">{renderMasked(masked, applied)}</div>
         </div>
       </div>
+    </>
+  );
+
+  if (embedded) return <div className="compare-embedded">{body}</div>;
+  return (
+    <Card size="small" title="脱敏对比">
+      {body}
     </Card>
   );
 }

@@ -55,6 +55,31 @@ def test_overlapping_candidates_keep_longest():
     assert [s.text for s in spans] == ["123456"]
 
 
+def test_detects_labeled_name_and_employee_id():
+    text = "姓名:成语\n性别男\n工号--23003"
+    found = {(s.type_code, s.text) for s in engine().detect(text)}
+    assert ("NAME_CN", "成语") in found
+    assert ("EMPLOYEE_ID", "--23003") in found
+
+
+def test_detects_loose_variants_with_labels():
+    text = (
+        "手机号:138-0013-8000\n"
+        "电话:010-12345678\n"
+        "身份证:110105491231002\n"
+        "身份证:110105 1949 1231 002X\n"
+        "银行卡:4111 1111 1111 1111\n"
+        "广东省深圳市南山区"
+    )
+    found = {(s.type_code, s.text) for s in engine().detect(text)}
+    assert ("PHONE_LOOSE", "138-0013-8000") in found
+    assert ("PHONE_LOOSE", "010-12345678") in found
+    assert ("ID_CARD_LOOSE", "110105491231002") in found
+    assert ("ID_CARD_LOOSE", "110105 1949 1231 002X") in found
+    assert ("BANK_CARD_LOOSE", "4111 1111 1111 1111") in found
+    assert any(code == "ADDRESS_PARTIAL" for code, _ in found)
+
+
 def test_span_to_dict():
     span = Span(0, 3, "X", "abc", 0.9, "rule", "low")
     assert span.to_dict()["type_code"] == "X"

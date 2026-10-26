@@ -40,6 +40,8 @@ export interface TypeDefinition {
     algo?: string;
     words?: string[];
     hint?: string;
+    confidence?: number;
+    strip?: string;
   }>;
   defaultAction: Action;
   actionOptions: Record<string, number>;

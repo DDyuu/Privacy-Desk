@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, App as AntApp, Button, Card, Spin, Typography } from "antd";
 import AppLayout, { type PageKey } from "./components/AppLayout";
-import { useIdleLock } from "./hooks/useIdleLock";
 import { useSession } from "./hooks/useSession";
 import { useTypes } from "./hooks/useTypes";
 import BatchPage from "./pages/BatchPage";
@@ -9,9 +8,6 @@ import LockPage from "./pages/LockPage";
 import SettingsPage from "./pages/SettingsPage";
 import TypesPage from "./pages/TypesPage";
 import WorkbenchPage from "./pages/WorkbenchPage";
-
-/** 5 分钟无操作自动锁定 */
-const IDLE_TIMEOUT = 5 * 60 * 1000;
 
 export default function App() {
   const session = useSession();
@@ -37,14 +33,6 @@ export default function App() {
     setLockReason("已手动锁定");
     void session.lock();
   }, [session.lock]);
-
-  const handleIdle = useCallback(() => {
-    setLockReason("已超过 5 分钟无操作，自动锁定");
-    void session.lock();
-    message.warning("长时间无操作，已自动锁定");
-  }, [session.lock, message]);
-
-  useIdleLock(IDLE_TIMEOUT, handleIdle, unlocked);
 
   const handleOpenDoc = useCallback((docId: string) => {
     setPendingDocId(docId);

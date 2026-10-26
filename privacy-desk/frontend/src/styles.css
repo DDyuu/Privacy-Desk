@@ -212,9 +212,10 @@ mark.hit-low {
 }
 .workbench-grid {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 380px;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+  grid-auto-rows: 580px;
 }
 .workbench-grid > * {
   min-width: 0;
@@ -223,16 +224,75 @@ mark.hit-low {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+}
+.workbench-left > .ant-card:first-child {
+  flex: 0 0 auto;
+}
+.doc-list-card {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+.doc-list-card .ant-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.workbench-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.workbench-main .ant-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.workbench-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.workbench-footer {
+  flex: 0 0 auto;
+  margin-top: 12px;
+}
+.detection-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
 }
 .list-count {
   color: var(--muted);
   font-size: 12px;
 }
 .doc-list {
-  max-height: 560px;
-  overflow: auto;
+  display: flex;
+  flex: 0 0 192px;
+  flex-direction: column;
+  height: 192px;
+  overflow: hidden;
+}
+.doc-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+.doc-pagination {
+  margin-top: auto;
+  padding-top: 8px;
 }
 .doc-item {
+  box-sizing: border-box;
+  flex: 0 0 64px;
+  height: 64px;
   padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 8px;

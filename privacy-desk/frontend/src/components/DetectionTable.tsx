@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Empty, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Empty, Select, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { Level, Span, TypeDefinition } from "../types";
 
@@ -87,38 +87,50 @@ export default function DetectionTable({ spans, byCode, loading = false }: Detec
 
   return (
     <div className="detection-table">
-      <Space wrap style={{ marginBottom: 10 }}>
-        <Select
-          size="small"
-          style={{ width: 168 }}
-          value={activeFilter}
-          onChange={setFilterCode}
-          options={[
-            { value: "all", label: "全部类型" },
-            ...codes.map((code) => ({ value: code, label: byCode[code]?.name ?? code })),
-          ]}
-        />
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          共 {rows.length} 处
-        </Typography.Text>
-      </Space>
-      <Table<Span>
-        size="small"
-        rowKey={(span) => `${span.start}-${span.end}-${span.type_code}`}
-        loading={loading}
-        columns={columns}
-        dataSource={rows}
-        pagination={{ pageSize: 8, size: "small", showSizeChanger: false, hideOnSinglePage: true }}
-        scroll={{ x: 532, y: 360 }}
-        locale={{
-          emptyText: (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={loading ? "正在识别…" : "请先执行识别"}
+      {spans.length === 0 ? (
+        <div className="detection-empty">
+          {loading ? (
+            <Spin />
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先执行识别" />
+          )}
+        </div>
+      ) : (
+        <>
+          <Space wrap style={{ marginBottom: 10 }}>
+            <Select
+              size="small"
+              style={{ width: 168 }}
+              value={activeFilter}
+              onChange={setFilterCode}
+              options={[
+                { value: "all", label: "全部类型" },
+                ...codes.map((code) => ({ value: code, label: byCode[code]?.name ?? code })),
+              ]}
             />
-          ),
-        }}
-      />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              共 {rows.length} 处
+            </Typography.Text>
+          </Space>
+          <Table<Span>
+            size="small"
+            rowKey={(span) => `${span.start}-${span.end}-${span.type_code}`}
+            loading={loading}
+            columns={columns}
+            dataSource={rows}
+            pagination={{ pageSize: 8, size: "small", showSizeChanger: false, hideOnSinglePage: true }}
+            scroll={{ x: 532 }}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={loading ? "正在识别…" : "请先执行识别"}
+                />
+              ),
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

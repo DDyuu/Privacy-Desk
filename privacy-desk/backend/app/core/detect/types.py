@@ -13,6 +13,8 @@ class Detector(BaseModel):
     algo: str | None = None
     words: list[str] = Field(default_factory=list)
     hint: str | None = None
+    confidence: float | None = None
+    strip: str | None = None
 
 
 class TypeDefinition(BaseModel):
