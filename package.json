@@ -1,0 +1,20 @@
+{
+  "name": "privacy-desk",
+  "version": "0.2.0",
+  "private": true,
+  "description": "隐盾 PrivacyDesk 桌面端（Electron 外壳 + FastAPI sidecar）",
+  "author": "PrivacyDesk",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev:ui": "npm --prefix frontend run dev",
+    "dev:electron": "electron .",
+    "dev": "concurrently -k \"npm:dev:ui\" \"cross-env PRIVACY_DESK_DEV_URL=http://localhost:5173 electron .\"",
+    "dist": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}
