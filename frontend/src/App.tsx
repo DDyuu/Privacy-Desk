@@ -24,6 +24,11 @@ export default function App() {
     if (unlocked) setLockReason("");
   }, [unlocked]);
 
+  // 锁屏用小窗、解锁后展开工作台窗口（仅 Electron 环境提供该能力）
+  useEffect(() => {
+    window.privacyDesk?.setWindowMode?.(unlocked ? "workbench" : "lock");
+  }, [unlocked]);
+
   useEffect(() => {
     if (session.error && unlocked) {
       message.error(session.error);
@@ -44,49 +49,43 @@ export default function App() {
 
   if (!session.status) {
     return (
-      <>
-        <TitleBar />
-        <div className="boot-screen">
-          {session.error ? (
-            <Card style={{ width: 440 }}>
-              <Alert
-                type="error"
-                showIcon
-                message="无法连接本地后端"
-                description={session.error}
-              />
-              <Button
-                type="primary"
-                style={{ marginTop: 16 }}
-                onClick={() => void session.refresh()}
-              >
-                重试连接
-              </Button>
-            </Card>
-          ) : (
-            <>
-              <Spin size="large" />
-              <Typography.Text type="secondary">正在连接本地服务…</Typography.Text>
-            </>
-          )}
-        </div>
-      </>
+      <div className="boot-screen">
+        {session.error ? (
+          <Card style={{ width: 440 }}>
+            <Alert
+              type="error"
+              showIcon
+              message="无法连接本地后端"
+              description={session.error}
+            />
+            <Button
+              type="primary"
+              style={{ marginTop: 16 }}
+              onClick={() => void session.refresh()}
+            >
+              重试连接
+            </Button>
+          </Card>
+        ) : (
+          <>
+            <Spin size="large" />
+            <Typography.Text type="secondary">正在连接本地服务…</Typography.Text>
+          </>
+        )}
+      </div>
     );
   }
 
   if (!unlocked) {
     return (
-      <>
-        <TitleBar />
-        <LockPage
-          status={session.status}
-          busy={session.busy}
-          error={session.error}
-          reason={lockReason}
-          onSetup={session.setup}
-          onUnlock={session.unlock}
-        />
-      </>
+      <LockPage
+        status={session.status}
+        busy={session.busy}
+        error={session.error}
+        reason={lockReason}
+        onSetup={session.setup}
+        onUnlock={session.unlock}
+      />
     );
   }
 

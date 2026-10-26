@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, dialog } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -16,8 +16,13 @@ const DEFAULT_DEV_URL = "http://localhost:5173";
 const DESIGN_WIDTH = 1440;
 const DESIGN_HEIGHT = 960;
 const TITLEBAR_HEIGHT = 36;
+const LOCK_WIDTH = 460;
+const LOCK_HEIGHT = 460;
+const LOCK_MIN_WIDTH = 440;
+const LOCK_MIN_HEIGHT = 440;
 
 let mainWindow = null;
+let windowMode = "lock";
 let backendChild = null;
 let backendToken = "";
 let backendPort = 0;
@@ -216,18 +221,47 @@ function isAllowedNavigation(target) {
 /** 按设计基准等比缩放页面，保证任意窗口尺寸下内容完整可见 */
 function applyContentZoom(win) {
   if (win.isDestroyed()) return;
+  // 小窗登录时不缩放，否则锁屏卡片会被缩得很小
+  if (windowMode !== "workbench") {
+    win.webContents.setZoomFactor(1);
+    return;
+  }
   const [width, height] = win.getContentSize();
   const scale = Math.min(width / DESIGN_WIDTH, height / DESIGN_HEIGHT);
   win.webContents.setZoomFactor(Math.min(Math.max(scale, 0.5), 2));
 }
 
+function enterWorkbenchMode(win) {
+  windowMode = "workbench";
+  win.setResizable(true);
+  win.setMaximizable(true);
+  win.setMinimumSize(960, 640);
+  win.setAspectRatio(DESIGN_WIDTH / DESIGN_HEIGHT);
+  win.setContentSize(DESIGN_WIDTH, DESIGN_HEIGHT);
+  win.center();
+  applyContentZoom(win);
+}
+
+function enterLockMode(win) {
+  windowMode = "lock";
+  if (win.isMaximized()) win.unmaximize();
+  win.setAspectRatio(0);
+  win.setMinimumSize(LOCK_MIN_WIDTH, LOCK_MIN_HEIGHT);
+  win.setContentSize(LOCK_WIDTH, LOCK_HEIGHT);
+  win.center();
+  // 锁屏是固定尺寸的小卡片，只保留最小化与关闭
+  win.setMaximizable(false);
+  win.setResizable(false);
+  win.webContents.setZoomFactor(1);
+}
+
 function createWindow(port, token) {
   const win = new BrowserWindow({
-    width: DESIGN_WIDTH,
-    height: DESIGN_HEIGHT,
+    width: LOCK_WIDTH,
+    height: LOCK_HEIGHT,
     useContentSize: true,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: LOCK_MIN_WIDTH,
+    minHeight: LOCK_MIN_HEIGHT,
     show: false,
     backgroundColor: "#f5f7fa",
     // 隐藏系统标题栏，窗口控制按钮以覆盖层形式保留在右上角
@@ -250,8 +284,8 @@ function createWindow(port, token) {
   });
 
   mainWindow = win;
-  // 锁定 3:2 宽高比，窗口缩放时页面整体等比缩放
-  win.setAspectRatio(DESIGN_WIDTH / DESIGN_HEIGHT);
+  windowMode = "lock";
+  applyContentZoom(win);
   win.on("resize", () => applyContentZoom(win));
   win.webContents.on("did-finish-load", () => applyContentZoom(win));
   // 禁用快捷键缩放，避免手动放大后内容溢出
@@ -353,6 +387,16 @@ if (!gotLock) {
   app.whenReady().then(() => {
     // 去掉 Windows 默认菜单栏（文件 / 编辑 / 视图 / 窗口 / 帮助）
     Menu.setApplicationMenu(null);
+    // 渲染进程切到工作台/锁屏时，同步切换窗口尺寸
+    ipcMain.on("window:mode", (event, mode) => {
+      const win = mainWindow;
+      if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
+      if (mode === "workbench") {
+        enterWorkbenchMode(win);
+      } else if (mode === "lock") {
+        enterLockMode(win);
+      }
+    });
     start();
   });
 }

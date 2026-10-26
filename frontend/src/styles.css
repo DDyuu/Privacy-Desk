@@ -28,7 +28,8 @@ body {
   height: env(titlebar-area-height, var(--titlebar-height));
   padding: 0 20px;
   background: #ffffff;
-  border-bottom: 1px solid var(--border);
+  /* 用外阴影画分隔线，避免被系统窗口按钮覆盖层遮住 */
+  box-shadow: 0 1px 0 var(--border);
   color: var(--muted);
   -webkit-app-region: drag;
   user-select: none;
@@ -39,8 +40,13 @@ body {
   color: var(--muted);
 }
 .app-shell {
+  height: 100vh;
   min-height: 100vh;
   padding-top: env(titlebar-area-height, var(--titlebar-height));
+  overflow: hidden;
+}
+.app-shell > .ant-layout {
+  min-height: 0;
 }
 .app-sider {
   background: #ffffff !important;
@@ -61,7 +67,10 @@ body {
   letter-spacing: 2px;
 }
 .page {
-  padding: 20px 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px;
 }
 .mono {
   font-family: Consolas, "JetBrains Mono", monospace;
@@ -157,26 +166,38 @@ mark.hit-low {
   padding-top: env(titlebar-area-height, var(--titlebar-height));
   background: var(--bg);
   color: var(--muted);
+  -webkit-app-region: drag;
+}
+.boot-screen .ant-card {
+  -webkit-app-region: no-drag;
 }
 .lock-screen {
-  padding: 24px;
-  padding-top: calc(env(titlebar-area-height, var(--titlebar-height)) + 24px);
-  background:
-    radial-gradient(circle at 15% 15%, rgba(15, 118, 110, 0.12), transparent 45%),
-    radial-gradient(circle at 85% 85%, rgba(30, 64, 175, 0.08), transparent 48%),
-    var(--bg);
+  padding: 0;
+  background: var(--panel);
+  -webkit-app-region: drag;
 }
 .lock-card {
   width: 100%;
-  max-width: 420px;
-  border: 1px solid var(--border);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
+  max-width: none;
+  min-height: 100vh;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-app-region: no-drag;
+}
+/* 小窗高度有限，压缩锁屏卡片的垂直间距 */
+.lock-card .ant-card-body {
+  padding: 20px 24px;
+}
+.lock-card .ant-form-item {
+  margin-bottom: 16px;
 }
 .lock-brand {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
+  -webkit-app-region: drag;
 }
 .lock-brand-icon {
   width: 46px;
@@ -202,7 +223,7 @@ mark.hit-low {
   letter-spacing: 2px;
 }
 .lock-footer {
-  margin-top: 16px;
+  margin-top: 12px;
   text-align: center;
   color: #94a3b8;
   font-size: 12px;
@@ -223,7 +244,13 @@ mark.hit-low {
 .workbench {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+/* 工具栏与导出栏保持自身高度，中间网格吃掉剩余空间 */
+.workbench > .ant-card {
+  flex: 0 0 auto;
 }
 .workbench-toolbar-row {
   display: flex;
@@ -235,10 +262,12 @@ mark.hit-low {
 }
 .workbench-grid {
   display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
-  grid-auto-rows: 580px;
+  grid-auto-rows: minmax(0, 1fr);
 }
 .workbench-grid > * {
   min-width: 0;
@@ -254,8 +283,10 @@ mark.hit-low {
 }
 .doc-list-card {
   display: flex;
-  flex: 1 0 auto;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
+  overflow: hidden;
 }
 .doc-list-card .ant-card-body {
   display: flex;

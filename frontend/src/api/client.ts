@@ -15,7 +15,11 @@ import type {
 
 declare global {
   interface Window {
-    privacyDesk?: { apiBase: string; token: string };
+    privacyDesk?: {
+      apiBase: string;
+      token: string;
+      setWindowMode?: (mode: "lock" | "workbench") => void;
+    };
   }
 }
 
