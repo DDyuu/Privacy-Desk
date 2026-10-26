@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.api.deps import get_context, require_unlocked
 from app.context import AppContext
+from app.core.detect.regex_synth import synthesize_pattern
 from app.core.detect.rule_engine import RuleEngine
 from app.core.detect.types import TypeDefinition
 
@@ -16,10 +17,23 @@ class TypeTestIn(BaseModel):
     samples: list[str]
 
 
+class GeneratePatternIn(BaseModel):
+    samples: list[str] = []
+
+
 @router.get("")
 def list_types(ctx: AppContext = Depends(get_context)) -> list[dict]:
     require_unlocked(ctx)
     return [item.model_dump(by_alias=True) for item in ctx.types.all()]
+
+
+@router.post("/generate-pattern")
+def generate_pattern(
+    payload: GeneratePatternIn, ctx: AppContext = Depends(get_context)
+) -> dict:
+    """根据正例归纳一个候选正则，不调用大模型。"""
+    require_unlocked(ctx)
+    return synthesize_pattern(payload.samples)
 
 
 @router.put("/{code}")

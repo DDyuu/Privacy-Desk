@@ -94,6 +94,17 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState("");
 
+  const [genOpen, setGenOpen] = useState(false);
+  const [genSamples, setGenSamples] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [genResult, setGenResult] = useState<{
+    pattern: string;
+    matched: number;
+    total: number;
+    message?: string;
+  } | null>(null);
+
   const openCreate = () => {
     setEditing(null);
     setSaveError("");
@@ -224,6 +235,40 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
     } finally {
       setTesting(false);
     }
+  };
+
+  const openGenerate = () => {
+    setGenSamples("");
+    setGenError("");
+    setGenResult(null);
+    setGenOpen(true);
+  };
+
+  const handleGenerate = async () => {
+    const samples = genSamples
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (samples.length === 0) {
+      message.warning("请至少输入一条样例");
+      return;
+    }
+    setGenerating(true);
+    setGenError("");
+    try {
+      setGenResult(await api.types.generatePattern(samples));
+    } catch (exc) {
+      setGenError(errorText(exc));
+      setGenResult(null);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const applyGenerated = () => {
+    if (!genResult?.pattern) return;
+    form.setFieldValue("pattern", genResult.pattern);
+    setGenOpen(false);
   };
 
   const handleDelete = async (record: TypeDefinition) => {
@@ -475,7 +520,18 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
             识别器
           </Divider>
 
-          <Form.Item name="pattern" label="正则表达式" extra="留空则不启用正则识别">
+          <Form.Item
+            name="pattern"
+            label="正则表达式"
+            extra={
+              <Space size={8}>
+                <span>留空则不启用正则识别</span>
+                <Button size="small" type="link" onClick={openGenerate}>
+                  从样例生成
+                </Button>
+              </Space>
+            }
+          >
             <Input className="mono" placeholder="例如 EMP-\d{4}" />
           </Form.Item>
           <Form.Item name="ignoreCase" valuePropName="checked">
@@ -546,6 +602,57 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
           pagination={false}
           locale={{ emptyText: "未命中任何片段" }}
         />
+      </Modal>
+
+      <Modal
+        open={genOpen}
+        title="从样例生成正则"
+        width={640}
+        okText="应用到正则"
+        cancelText="取消"
+        confirmLoading={generating}
+        okButtonProps={{ disabled: !genResult?.pattern }}
+        onOk={applyGenerated}
+        onCancel={() => setGenOpen(false)}
+      >
+        <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
+          每行一条正例，最多 20 条。所有样例中完全相同的部分会保留为字面量，只有变化的片段才泛化；建议至少填 2 条。归纳完全在本地完成，不会调用大模型。
+        </Typography.Paragraph>
+        <Input.TextArea
+          className="mono"
+          rows={6}
+          value={genSamples}
+          onChange={(event) => setGenSamples(event.target.value)}
+          placeholder={"EMP-23003\nEMP-23004"}
+          style={{ marginBottom: 12 }}
+        />
+        <Button onClick={() => void handleGenerate()} loading={generating}>
+          生成
+        </Button>
+        {genError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="生成失败"
+            description={genError}
+            style={{ marginTop: 12 }}
+          />
+        ) : null}
+        {genResult ? (
+          <div style={{ marginTop: 12 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              命中 {genResult.matched}/{genResult.total} 条样例
+              {genResult.message ? `；${genResult.message}` : ""}
+            </Typography.Text>
+            <Input.TextArea
+              className="mono"
+              rows={3}
+              value={genResult.pattern}
+              readOnly
+              style={{ marginTop: 8 }}
+            />
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

@@ -163,6 +163,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ type, samples }),
       }),
+    generatePattern: (samples: string[]) =>
+      request<{ pattern: string; matched: number; total: number; message?: string }>(
+        "/types/generate-pattern",
+        { method: "POST", body: JSON.stringify({ samples }) },
+      ),
   },
   settings: {
     getLlm: () => request<LLMConfig>("/settings/llm"),
