@@ -24,4 +24,6 @@ contextBridge.exposeInMainWorld("privacyDesk", {
     ipcRenderer.on("window:mode-applied", listener);
     return () => ipcRenderer.removeListener("window:mode-applied", listener);
   },
+  // 销毁式重置：主进程删除数据目录后会自动重启应用
+  resetData: () => ipcRenderer.invoke("app:reset"),
 });

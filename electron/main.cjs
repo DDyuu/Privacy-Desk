@@ -47,6 +47,11 @@ function devUrl() {
   return process.env.PRIVACY_DESK_DEV_URL || DEFAULT_DEV_URL;
 }
 
+/** 后端数据目录：与后端默认值保持一致（主进程未设置 PRIVACY_DESK_DATA） */
+function dataDir() {
+  return path.join(app.getPath("home"), ".privacy-desk");
+}
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -439,6 +444,34 @@ if (!gotLock) {
       const win = mainWindow;
       if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
       animateWindowOpacity(win, direction === "out" ? 0 : 1);
+    });
+    // 忘记主密码时的销毁式重置：先结束后端释放数据库文件，再删除整个数据目录并重启应用
+    ipcMain.handle("app:reset", async (event) => {
+      const win = mainWindow;
+      if (!win || win.isDestroyed() || event.sender !== win.webContents) {
+        return { ok: false, message: "窗口状态异常，请重启应用后重试" };
+      }
+      const target = dataDir();
+      let removed = true;
+      try {
+        stopBackend();
+        // Windows 下 SQLite 的 .db/.wal/.shm 需要等后端进程完全退出后才能删除
+        await delay(400);
+        fs.rmSync(target, { recursive: true, force: true });
+      } catch (error) {
+        removed = false;
+        dialog.showErrorBox(
+          "重置失败",
+          `无法删除 ${target}：${error instanceof Error ? error.message : String(error)}\n\n请退出应用后手动删除该目录。`
+        );
+      }
+      app.relaunch();
+      setTimeout(() => app.exit(0), 200);
+      return {
+        ok: removed,
+        path: target,
+        message: removed ? undefined : "部分文件未能删除，请退出后手动清理",
+      };
     });
     start();
   });

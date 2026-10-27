@@ -23,6 +23,8 @@ declare global {
       setWindowMode?: (mode: "lock" | "workbench") => void;
       fadeWindow?: (direction: "out" | "in") => void;
       onWindowModeApplied?: (callback: (mode: "lock" | "workbench") => void) => () => void;
+      /** 清空本机数据并重启，仅桌面版提供；浏览器调试时为 undefined */
+      resetData?: () => Promise<{ ok: boolean; path?: string; message?: string }>;
     };
   }
 }

@@ -1,6 +1,7 @@
 // 锁屏页：未初始化时引导设置主密码，已初始化时校验主密码解锁，成功后由上层切换到工作台
+import { useState } from "react";
 import { LockOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Form, Input, Typography } from "antd";
+import { Alert, App as AntApp, Button, Card, Form, Input, Modal, Typography } from "antd";
 import type { SessionStatus } from "../types";
 
 interface LockPageProps {
@@ -26,7 +27,11 @@ export default function LockPage({
   onUnlock,
 }: LockPageProps) {
   const [form] = Form.useForm<FormValues>();
+  const { message } = AntApp.useApp();
   const initialized = status.initialized;
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetWord, setResetWord] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const handleFinish = async (values: FormValues) => {
     // 已初始化走解锁，否则走首次设置；设置成功后清空表单，避免密码残留在输入框
@@ -36,6 +41,32 @@ export default function LockPage({
       await onSetup(values.password);
       form.resetFields();
     }
+  };
+
+  /** 销毁式重置：主进程删除数据目录后会重启应用，因此成功后无需收尾 */
+  const handleReset = async () => {
+    const bridge = window.privacyDesk;
+    if (!bridge?.resetData) {
+      message.error("仅桌面版支持重置，请在应用中使用");
+      return;
+    }
+    setResetting(true);
+    try {
+      const result = await bridge.resetData();
+      if (!result.ok) {
+        message.error(result.message || "重置未完成，请退出应用后手动删除数据目录");
+        setResetting(false);
+      }
+    } catch (exc) {
+      message.error(exc instanceof Error ? exc.message : String(exc));
+      setResetting(false);
+    }
+  };
+
+  const closeReset = () => {
+    if (resetting) return;
+    setResetOpen(false);
+    setResetWord("");
   };
 
   return (
@@ -123,12 +154,51 @@ export default function LockPage({
           </Button>
         </Form>
 
+        {/* 主密码不存储，只能提供销毁式重置，不能提供找回 */}
+        {initialized ? (
+          <div style={{ marginTop: 4, textAlign: "center" }}>
+            <Button type="link" size="small" onClick={() => setResetOpen(true)}>
+              忘记密码？
+            </Button>
+          </div>
+        ) : null}
+
         <div className="lock-footer">
           数据仅保存在本机目录，退出后可随时锁定
           <br />
           按 Enter 可直接提交
         </div>
       </Card>
+
+      <Modal
+        open={resetOpen}
+        title="重置并清空全部数据"
+        width={360}
+        okText="清空并重启"
+        cancelText="取消"
+        okButtonProps={{ danger: true, disabled: resetWord.trim() !== "重置" }}
+        confirmLoading={resetting}
+        maskClosable={!resetting}
+        closable={!resetting}
+        onCancel={closeReset}
+        onOk={() => void handleReset()}
+      >
+        <Typography.Paragraph style={{ fontSize: 13, lineHeight: 1.8 }}>
+          将删除本机全部数据：文档原文与脱敏结果、检测记录、报告、自定义类型、设置以及主密码本身。
+        </Typography.Paragraph>
+        <Typography.Paragraph type="danger" strong style={{ fontSize: 13 }}>
+          数据删除后无法恢复，也无法找回。
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 6 }}>
+          输入「重置」以确认：
+        </Typography.Paragraph>
+        <Input
+          value={resetWord}
+          disabled={resetting}
+          placeholder="重置"
+          onChange={(event) => setResetWord(event.target.value)}
+        />
+      </Modal>
     </div>
   );
 }
