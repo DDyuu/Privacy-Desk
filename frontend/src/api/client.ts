@@ -1,3 +1,4 @@
+// 前端 API 基础设施：解析 Electron 注入的地址与令牌，统一拼接前缀、附加 X-App-Token 并归一化错误。
 import type {
   BatchStatus,
   CompareResponse,
@@ -26,10 +27,12 @@ declare global {
   }
 }
 
+// 优先用 preload 注入的地址（Electron 会按可用端口启动后端）；浏览器调试时退回构建期变量或本地默认端口
 const API_BASE =
   window.privacyDesk?.apiBase ??
   (import.meta.env.VITE_API_BASE as string | undefined) ??
   "http://127.0.0.1:8765";
+// 与后端共享的启动令牌，由主进程通过命令行注入，运行期不落盘
 const APP_TOKEN =
   window.privacyDesk?.token ?? (import.meta.env.VITE_APP_TOKEN as string | undefined) ?? "";
 
@@ -43,6 +46,7 @@ export class ApiError extends Error {
   }
 }
 
+// 统一构造请求头：JSON 请求带 Content-Type，拿到令牌后所有请求都带 X-App-Token
 function headers(json = true): Record<string, string> {
   const value: Record<string, string> = {};
   if (APP_TOKEN) value["X-App-Token"] = APP_TOKEN;
@@ -54,6 +58,7 @@ function headers(json = true): Record<string, string> {
 function normalizeDetail(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {
+    // FastAPI 422 的 detail 是逐字段错误数组，取出 msg 拼成单行文案
     const messages = detail.map((item) => {
       if (item && typeof item === "object" && "msg" in item) {
         const value = (item as { msg?: unknown }).msg;
@@ -67,6 +72,7 @@ function normalizeDetail(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+// 所有接口统一加 /api/v1 前缀；FormData 请求不能手动设 Content-Type，否则会丢 boundary
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...init,
@@ -74,6 +80,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!response.ok) {
     let detail = response.statusText;
+    // 优先解析后端 detail（字符串或 422 数组），非 JSON 错误体则保留 HTTP 状态文本
     try {
       const body = await response.json();
       detail = normalizeDetail(body.detail, detail);
@@ -82,6 +89,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     throw new ApiError(response.status, detail);
   }
+  // 204 没有响应体，直接返回避免 json() 解析报错
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
@@ -137,6 +145,7 @@ export const api = {
     download: async (id: string, kind: "masked" | "report", fmt: string, password?: string) => {
       const query = new URLSearchParams({ kind, fmt });
       if (password) query.set("password", password);
+      // 导出是二进制流且密码放在查询串，故不走 request 的 JSON 解析路径
       const response = await fetch(`${API_BASE}/api/v1/documents/${id}/export?${query}`, {
         headers: headers(false),
       });
@@ -208,6 +217,7 @@ export function errorText(exc: unknown): string {
   return "操作失败，请稍后重试";
 }
 
+// 立即释放 object URL，避免连续导出时临时内存累积
 export function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");

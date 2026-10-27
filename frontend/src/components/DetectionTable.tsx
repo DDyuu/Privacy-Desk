@@ -1,3 +1,4 @@
+// 识别结果表：按类型筛选命中片段，并可逐条勾选忽略（忽略项不参与后续脱敏）。
 import { useMemo, useState } from "react";
 import {
   Checkbox,
@@ -19,6 +20,7 @@ const LEVEL_META: Record<Level, { label: string; color: string }> = {
   low: { label: "低", color: "blue" },
 };
 
+// 同一文本可能出现相同内容，靠起止位置与类型组合保证每行唯一；rowKey 与忽略集合共用该值
 const spanKey = (span: Span) => `${span.start}-${span.end}-${span.type_code}`;
 
 interface DetectionTableProps {
@@ -43,6 +45,7 @@ export default function DetectionTable({
     [spans],
   );
 
+  // 若当前筛选的类型在新结果里已不存在，回落到“全部”，避免筛选出空表
   const activeFilter = filterCode === "all" || codes.includes(filterCode) ? filterCode : "all";
 
   const rows = useMemo(() => {
@@ -149,12 +152,14 @@ export default function DetectionTable({
             size="small"
             rowKey={spanKey}
             rowClassName={(span) =>
+              // 已忽略的行整体降透明度，保留在表格中以便随时取消忽略
               ignoredKeys.includes(spanKey(span)) ? "det-ignored" : ""
             }
             loading={loading}
             columns={columns}
             dataSource={rows}
             pagination={{ pageSize: 8, size: "small", showSizeChanger: false, hideOnSinglePage: true }}
+            // 横向滚动宽度等于各列固定宽度之和（56+104+140+96+70+64+58），列宽调整时需同步
             scroll={{ x: 588 }}
             locale={{
               emptyText: (

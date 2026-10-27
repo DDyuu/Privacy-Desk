@@ -1,3 +1,4 @@
+// 导出栏：导出脱敏文件，或用主密码二次确认后导出 JSON/PDF 报告。
 import { useEffect, useState } from "react";
 import { DownloadOutlined, FilePdfOutlined, FileTextOutlined } from "@ant-design/icons";
 import { App, Button, Card, Input, Modal, Space, Tooltip, Typography } from "antd";
@@ -19,6 +20,7 @@ function baseName(doc: DocumentMeta): string {
     : doc.name;
 }
 
+// 后端用状态码区分失败原因：401 未带密码、403 密码错误、409 未完成有效脱敏
 function exportError(exc: unknown): string {
   if (exc instanceof ApiError) {
     if (exc.status === 401) return "需要主密码";
@@ -37,11 +39,13 @@ export default function ExportBar({ document, verify }: ExportBarProps) {
   const [password, setPassword] = useState("");
 
   useEffect(() => {
+    // 切换文档时关闭弹窗并清空密码，避免上一份文档输入的密码残留
     setModalOpen(false);
     setPassword("");
   }, [document?.id]);
 
   const verifyFailed = Boolean(verify && !verify.passed);
+  // 校验发现高敏残留时一律禁止导出脱敏文件
   const maskedReady = Boolean(
     document &&
       (document.status === "masked" || document.status === "verified") &&
@@ -74,6 +78,7 @@ export default function ExportBar({ document, verify }: ExportBarProps) {
   };
 
   const openReport = (format: ReportFormat) => {
+    // 报告含识别与替换明细，先弹窗收集主密码，确认后才向后端请求
     setReportFormat(format);
     setPassword("");
     setModalOpen(true);
@@ -120,6 +125,7 @@ export default function ExportBar({ document, verify }: ExportBarProps) {
             </Button>
           </span>
         </Tooltip>
+        {/* 两个报告按钮共用 reportReady 可用条件；loading 只跟随当前所选格式，避免同时转圈 */}
         <Tooltip title={reportReady ? undefined : "请先完成识别与脱敏"}>
           <span style={{ display: "inline-block" }}>
             <Button

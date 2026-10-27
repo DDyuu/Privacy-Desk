@@ -1,3 +1,4 @@
+// 文档列表：固定每页 3 条展示历史文档，并提供切换与清空入口。
 import { useEffect, useMemo, useState } from "react";
 import { DeleteOutlined } from "@ant-design/icons";
 import {
@@ -52,9 +53,11 @@ export default function DocumentList({
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    // 文档数量变化（新增/清空）后回到第 1 页，防止当前页码超出新的总页数
     setPage(1);
   }, [documents.length]);
 
+  // 配合 CSS 中 .doc-item 固定 64px 行高，3 条一页让列表区域高度稳定，翻页时不抖动
   const visible = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return documents.slice(start, start + PAGE_SIZE);
@@ -67,10 +70,12 @@ export default function DocumentList({
       title="文档列表"
       extra={
         <Space size={8}>
+          {/* 展示“已存数量 / 后端容量上限”，maxDocs 为空时只显示数量 */}
           <span className="list-count">
             {documents.length}
             {maxDocs ? ` / ${maxDocs}` : ""}
           </span>
+          {/* 清空会连同原文与结果一起删除，属不可恢复操作，先由 Popconfirm 二次确认 */}
           {documents.length > 0 && onClear ? (
             <Popconfirm
               title="清空全部文档？"

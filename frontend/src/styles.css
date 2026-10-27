@@ -1,6 +1,8 @@
+/* 全局样式：自绘标题栏 + 应用外壳布局，配合 Electron 隐藏系统标题栏（窗口按钮为 overlay）。 */
 :root {
   --brand: #0f766e;
   --ink: #0b1220;
+  /* 与主进程 TITLEBAR_HEIGHT 保持一致，作为 env() 不可用时的兜底 */
   --titlebar-height: 36px;
   --muted: #64748b;
   --bg: #f5f7fa;
@@ -18,6 +20,7 @@ body {
 }
 /* 自定义标题栏：整条可拖动，右上角由系统绘制窗口按钮 */
 .titlebar {
+  /* 固定铺满窗口顶部：内容从 y=0 渲染，再由 .app-shell 的 padding-top 让开 */
   position: fixed;
   top: 0;
   left: 0;
@@ -31,6 +34,7 @@ body {
   /* 用外阴影画分隔线，避免被系统窗口按钮覆盖层遮住 */
   box-shadow: 0 1px 0 var(--border);
   color: var(--muted);
+  /* 整条可拖动窗口；按钮等交互元素需在各自规则里设 no-drag */
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -40,11 +44,14 @@ body {
   color: var(--muted);
 }
 .app-shell {
+  /* 窗口高度即视口高度：固定 100vh 防止内容把整页撑高，出现双层滚动条 */
   height: 100vh;
   min-height: 100vh;
+  /* 让内容避开 overlay 标题栏，高度由系统变量提供 */
   padding-top: env(titlebar-area-height, var(--titlebar-height));
   overflow: hidden;
 }
+/* flex 子项默认 min-height:auto 会撑开容器，置 0 才能让内部滚动容器收缩 */
 .app-shell > .ant-layout {
   min-height: 0;
 }
@@ -69,6 +76,7 @@ body {
 .page {
   flex: 1;
   min-height: 0;
+  /* 仅内容区滚动，侧栏与顶栏保持固定 */
   overflow: auto;
   padding: 16px 24px;
 }
@@ -88,6 +96,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
+  /* 固定高度让左右两栏各自滚动，切换文档时页面不跳动 */
   height: 480px;
   overflow: auto;
   white-space: pre-wrap;
@@ -155,6 +164,7 @@ mark.hit-low {
 /* 启动与锁屏 */
 .boot-screen,
 .lock-screen {
+  /* 占满整个窗口（含标题栏预留高度），避免小窗口下出现滚动条 */
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -179,6 +189,7 @@ mark.hit-low {
 .lock-card {
   width: 100%;
   max-width: none;
+  /* 卡片铺满锁屏小窗并去掉自带边框阴影，看起来像独立页面而非弹窗 */
   min-height: 100vh;
   border: none;
   border-radius: 0;
@@ -245,6 +256,7 @@ mark.hit-low {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* 占满内容区高度，由内部网格分配剩余空间；min-height:0 允许子项收缩 */
   height: 100%;
   min-height: 0;
 }
@@ -264,9 +276,11 @@ mark.hit-low {
   display: grid;
   flex: 1 1 auto;
   min-height: 0;
+  /* 左栏固定 280px，右栏吃掉剩余宽度；minmax(0,1fr) 允许右栏内部滚动 */
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
+  /* 行高必须是 minmax(0,1fr)：auto 行会被长内容撑高，导致整页出现滚动条 */
   grid-auto-rows: minmax(0, 1fr);
 }
 .workbench-grid > * {
@@ -297,6 +311,7 @@ mark.hit-low {
 .workbench-main {
   display: flex;
   flex-direction: column;
+  /* 占满所在网格单元，正文在 .workbench-stage 内单独滚动 */
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -350,6 +365,7 @@ mark.hit-low {
 }
 .doc-list {
   display: flex;
+  /* 固定 192px 可视高度，超出部分在列表内部滚动而不撑高页面 */
   flex: 0 0 192px;
   flex-direction: column;
   height: 192px;

@@ -1,3 +1,4 @@
+// 应用外壳：左侧菜单 + 顶栏（页面标题/推理模式/锁定），内容区由 App 按 page 注入。
 import { useMemo } from "react";
 import {
   FileProtectOutlined,
@@ -10,6 +11,7 @@ import {
 import { Button, Layout, Menu, Tag, Tooltip } from "antd";
 import type { SessionStatus } from "../types";
 
+// 菜单页标识；未引入路由库，页面切换完全由 App 的 state 驱动
 export type PageKey = "workbench" | "batch" | "types" | "reveal" | "settings";
 
 const PAGE_TITLES: Record<PageKey, string> = {
@@ -20,6 +22,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   settings: "设置",
 };
 
+// 三种推理模式的标签配色与说明集中维护，避免各页面重复判断
 const LLM_TAG: Record<
   SessionStatus["llm_mode"],
   { color: string; label: string; tip: string }
@@ -52,6 +55,7 @@ interface AppLayoutProps {
 export default function AppLayout({ status, page, onPageChange, onLock, children }: AppLayoutProps) {
   const llm = LLM_TAG[status.llm_mode];
 
+  // 菜单结构固定，只构建一次；选中态由 selectedKeys 跟随 page
   const menuItems = useMemo(
     () => [
       { key: "workbench", icon: <FileProtectOutlined />, label: "文档脱敏" },
@@ -65,6 +69,7 @@ export default function AppLayout({ status, page, onPageChange, onLock, children
 
   return (
     <Layout className="app-shell">
+      {/* 侧栏固定 208px，页面滚动只发生在内容区 */}
       <Layout.Sider width={208} className="app-sider" theme="light">
         <div className="brand">
           隐盾
@@ -82,9 +87,11 @@ export default function AppLayout({ status, page, onPageChange, onLock, children
         <Layout.Header className="app-header">
           <span className="header-title">{PAGE_TITLES[page]}</span>
           <div className="header-actions">
+            {/* 模式标签提示当前数据是否离开本机，悬停可看说明 */}
             <Tooltip title={llm.tip}>
               <Tag color={llm.color}>{llm.label}</Tag>
             </Tooltip>
+            {/* 未解锁时禁用，避免无意义地调用锁定接口 */}
             <Button icon={<LockOutlined />} onClick={onLock} disabled={!status.unlocked}>
               锁定
             </Button>

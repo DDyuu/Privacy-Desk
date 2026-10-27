@@ -1,3 +1,4 @@
+// 锁屏页：未初始化时引导设置主密码，已初始化时校验主密码解锁，成功后由上层切换到工作台
 import { LockOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Form, Input, Typography } from "antd";
 import type { SessionStatus } from "../types";
@@ -28,6 +29,7 @@ export default function LockPage({
   const initialized = status.initialized;
 
   const handleFinish = async (values: FormValues) => {
+    // 已初始化走解锁，否则走首次设置；设置成功后清空表单，避免密码残留在输入框
     if (initialized) {
       await onUnlock(values.password);
     } else {
@@ -38,6 +40,7 @@ export default function LockPage({
 
   return (
     <div className="lock-screen">
+      {/* 窗口模式：锁屏层铺满整个窗口，卡片居中；解锁成功后由上层替换为工作台 */}
       <Card className="lock-card">
         <div className="lock-brand">
           <div className="lock-brand-icon">
@@ -62,6 +65,7 @@ export default function LockPage({
           <Alert type="warning" showIcon message={reason} style={{ marginBottom: 16 }} />
         ) : null}
 
+        {/* 密码错误等失败原因由上层通过 error 传入，这里只负责展示，避免页面自己拼提示语 */}
         {error ? (
           <Alert
             type="error"
@@ -105,6 +109,7 @@ export default function LockPage({
                 }),
               ]}
             >
+              {/* 确认框内按回车直接提交，省去再点一次按钮 */}
               <Input.Password
                 autoComplete="new-password"
                 placeholder="再次输入主密码"

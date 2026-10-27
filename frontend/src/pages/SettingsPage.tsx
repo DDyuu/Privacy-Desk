@@ -1,3 +1,4 @@
+// 设置页：配置大模型的在线 / 本地 Ollama / 纯规则模式，并展示 API Key 的来源。
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -78,6 +79,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
       setHasKey(Boolean(config.has_key));
       setEnvKeys(config.env_keys ?? []);
       setKeySource(config.key_source ?? "none");
+      // api_key 固定回填空串：后端从不明文回显 Key，空值也正好表达“留空不修改”
       form.setFieldsValue({
         mode: config.mode,
         base_url: config.base_url,
@@ -100,6 +102,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 读取表单当前值而非已保存配置，让检测结果跟着用户尚未保存的地址与模型走
   const checkOllama = async () => {
     setCheckingOllama(true);
     try {
@@ -119,6 +122,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
       ollamaCheckedRef.current = null;
       return;
     }
+    // 用 ref 记录已检测过，避免 StrictMode 下 effect 二次执行或重复切换时重复发请求
     if (ollamaCheckedRef.current === "ollama") return;
     ollamaCheckedRef.current = "ollama";
     void checkOllama();
@@ -126,6 +130,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedMode]);
 
+  // 即时扫描当前进程的环境变量并刷新 Key 来源展示；环境变量 Key 只读不落库
   const handleDetectEnv = async () => {
     setDetecting(true);
     try {
@@ -146,6 +151,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
     }
   };
 
+  // 提交时 api_key 为空串表示“不修改已保存的 Key”，后端据此跳过覆盖
   const handleSave = async () => {
     let values: SettingsFormValues;
     try {
@@ -260,6 +266,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
             >
               <Input placeholder="deepseek-flash" />
             </Form.Item>
+            {/* 标签行两端对齐，把“检测环境变量”按钮放到 Key 标题右侧，省去单独一行 */}
             <Form.Item
               name="api_key"
               className="settings-api-key-item"
@@ -282,6 +289,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
               extra={
                 hasKey ? (
                   <Space size={4} wrap>
+                    {/* key_source 为 stored 时说明数据库中的 Key 生效，环境变量仅作回退 */}
                     <Tag color="green">已配置 Key</Tag>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {keySource === "stored"

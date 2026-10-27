@@ -1,3 +1,4 @@
+// 脱敏对比：左侧原文按敏感等级高亮，右侧脱敏文本对替换位置着色。
 import type { ReactNode } from "react";
 import { Alert, Card, Popover } from "antd";
 import type { AppliedItem, Span, TypeDefinition } from "../types";
@@ -37,11 +38,13 @@ function renderOriginal(
   byCode: Record<string, TypeDefinition>,
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
+  // 先按起点排序，才能用一个游标顺序推进；后端返回的 span 顺序不保证有序
   const ordered = [...spans].sort((a, b) => a.start - b.start);
   const totalCodePoints = codePointLength(text);
   let cursor = 0;
 
   for (const span of ordered) {
+    // 跳过空区间、越界以及与前一个片段重叠的 span，避免重复切片
     if (span.start >= span.end || span.end > totalCodePoints) continue;
     const start = toU16(text, span.start);
     const end = toU16(text, span.end);
@@ -64,8 +67,10 @@ function renderOriginal(
 
 function renderMasked(masked: string, applied: AppliedItem[]): ReactNode[] {
   const nodes: ReactNode[] = [];
+  // 按起点排序后单游标推进
   const ordered = [...applied].sort((a, b) => a.start - b.start);
   let cursor = 0;
+  // 替换会改变文本长度，delta 累积长度差，把原文坐标换算到脱敏文本坐标
   let delta = 0;
 
   for (const item of ordered) {
@@ -99,6 +104,7 @@ export default function CompareView({
   byCode,
   embedded = false,
 }: CompareViewProps) {
+  // 文本都以 React 文本节点渲染，天然转义 HTML，因此不需要手动处理 & < > 等字符
   const body = (
     <>
       <Alert

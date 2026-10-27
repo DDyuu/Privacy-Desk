@@ -1,7 +1,10 @@
+// 与后端 Pydantic 模型一一对应的类型定义；字段沿用 snake_case，避免维护一层字段转换。
+// 风险等级与脱敏动作，取值直接参与接口传输，不能随意改名
 export type Level = "high" | "medium" | "low";
 export type Action = "mask" | "replace" | "fuzz" | "encrypt";
 
 export interface Span {
+  // 原文中的字符偏移，前端据此切片高亮（end 不含）
   start: number;
   end: number;
   type_code: string;
@@ -18,6 +21,7 @@ export interface DocumentMeta {
   name: string;
   ext: string;
   size: number;
+  // 文档状态机：上传 → 检测 → 脱敏 → 校验
   status: "uploaded" | "detected" | "masked" | "verified";
   created_at: string;
   updated_at: string;
@@ -35,6 +39,7 @@ export interface TypeDefinition {
   level: Level;
   builtin: boolean;
   enabled: boolean;
+  // 一个类型可由多个检测器组合，按 kind 使用各自的配置字段
   detectors: Array<{
     kind: "regex" | "checksum" | "keyword" | "dict" | "llm";
     pattern?: string;
@@ -56,6 +61,7 @@ export interface VerifyResult {
   issues: string[];
 }
 
+// initialized 决定锁屏显示初始化还是解锁；unlocked 驱动 App 的 boot/lock/app 切换
 export interface SessionStatus {
   initialized: boolean;
   unlocked: boolean;
@@ -73,6 +79,7 @@ export interface EnvKeyInfo {
 }
 
 export interface LLMConfig {
+  // 与后端设置的推理模式枚举一致：在线 / 本地 Ollama / 纯规则
   mode: "online" | "ollama" | "rules";
   base_url: string;
   model: string;

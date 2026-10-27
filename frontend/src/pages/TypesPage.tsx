@@ -1,3 +1,4 @@
+// 敏感类型页：维护自定义识别类型（内置类型只读），支持样例测试与从样例生成正则。
 import { useState } from "react";
 import { PlusOutlined } from "@ant-design/icons";
 import {
@@ -184,6 +185,7 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
       enabled: editing?.enabled ?? true,
       detectors,
       defaultAction: values.defaultAction,
+      // 只有 mask 动作需要保留位数，其他动作不写空字段，避免后端把它当作有效配置
       actionOptions:
         values.defaultAction === "mask"
           ? {
@@ -215,6 +217,7 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
   };
 
   const handleTest = async () => {
+    // 每次运行都先清空上一次结果，失败时也保持为空，避免展示过期命中
     if (!testTarget) return;
     const samples = samplesText
       .split(/\r?\n/)
@@ -266,12 +269,14 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
   };
 
   const applyGenerated = () => {
+    // 生成的正则只写回表单，仍需用户点“保存”才落库
     if (!genResult?.pattern) return;
     form.setFieldValue("pattern", genResult.pattern);
     setGenOpen(false);
   };
 
   const handleDelete = async (record: TypeDefinition) => {
+    // 删除入口已由 Popconfirm 二次确认，这里只负责调用接口并刷新列表
     try {
       await api.types.remove(record.code);
       await onRefresh();
@@ -281,6 +286,7 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
     }
   };
 
+  // 一个样例可能命中多个片段，这里拍平成“一条命中一行”的表格数据
   const testRows: TestRow[] = testResults.flatMap((result, sampleIndex) =>
     result.spans.map((span, spanIndex) => ({
       key: `${sampleIndex}-${spanIndex}`,
@@ -362,6 +368,7 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
       width: 210,
       render: (_value, record) => (
         <Space size={4} wrap>
+          {/* 内置类型只读：按钮禁用并用 Tooltip 说明原因，span 包裹让 Tooltip 在禁用态仍可触发 */}
           <Tooltip title={record.builtin ? "内置类型不可覆盖" : undefined}>
             <span>
               <Button
@@ -453,6 +460,7 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
         >
           <Row gutter={12}>
             <Col span={9}>
+              {/* 代码是类型的唯一标识，编辑时锁定不可改 */}
               <Form.Item
                 name="code"
                 label="代码"
@@ -641,6 +649,7 @@ export default function TypesPage({ types, loading, onRefresh }: TypesPageProps)
         {genResult ? (
           <div style={{ marginTop: 12 }}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {/* 命中数先于保存给出信号：覆盖不全时由 message 解释，用户可改样例再生成 */}
               命中 {genResult.matched}/{genResult.total} 条样例
               {genResult.message ? `；${genResult.message}` : ""}
             </Typography.Text>

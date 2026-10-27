@@ -1,3 +1,4 @@
+// 批量页：多选文件一次性提交，后端排队处理，页面只负责轮询进度并按条目展示结果
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InboxOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import {
@@ -20,6 +21,7 @@ import type { BatchStatus } from "../types";
 
 /** 与后端 ALLOWED_EXTS 保持一致 */
 const ACCEPT = ".txt,.md,.log,.py,.java,.js,.ts,.json,.csv,.eml,.docx,.pdf,.doc";
+// 轮询节奏：每 1.5s 拉一次状态；后端返回 done 后不再排下一次，避免无意义请求
 const POLL_INTERVAL = 1500;
 
 type BatchItem = BatchStatus["items"][number];
@@ -52,6 +54,7 @@ export default function BatchPage({ onOpenDoc }: BatchPageProps) {
   const [batch, setBatch] = useState<BatchStatus | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  // 记录已提示过完成的批次，避免重复轮询或重进页面时再次弹成功提示
   const finishedRef = useRef<string | null>(null);
 
   const addFiles = useCallback((incoming: File[]) => {
@@ -96,6 +99,7 @@ export default function BatchPage({ onOpenDoc }: BatchPageProps) {
         const status = await api.batches.get(batchId);
         if (cancelled) return;
         setBatch(status);
+        // 只有全部处理完（done）才终止轮询，否则按固定间隔继续拉取
         if (status.status === "done") {
           if (finishedRef.current !== status.id) {
             finishedRef.current = status.id;
@@ -118,6 +122,7 @@ export default function BatchPage({ onOpenDoc }: BatchPageProps) {
   }, [batchId, message]);
 
   const running = batch !== null && batch.status === "running";
+  // 文件上传是并发发起的，但后端逐条串行识别与脱敏，所以进度只能按已完成数粗略展示
   const percent =
     batch && batch.total > 0 ? Math.min(100, Math.round((batch.done / batch.total) * 100)) : 0;
 
@@ -165,6 +170,7 @@ export default function BatchPage({ onOpenDoc }: BatchPageProps) {
         ),
     },
     {
+      // 成功产出文档的条目可跳转工作台继续处理；失败项没有 doc_id，只能重新上传后重试
       title: "操作",
       key: "actions",
       width: 140,

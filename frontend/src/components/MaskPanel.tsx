@@ -1,3 +1,4 @@
+// 脱敏配置面板：按敏感类型逐行设置脱敏动作，聚合未忽略片段后提交脱敏。
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Empty, InputNumber, Select, Space, Tag, Tooltip, Typography } from "antd";
 import type { Action, MaskActions, MaskStats, Span, TypeDefinition, VerifyResult } from "../types";
@@ -32,6 +33,7 @@ interface MaskPanelProps {
   onMask: (actions: MaskActions) => void;
 }
 
+// 新建配置行时继承类型定义里的默认动作与保留位数，减少手工调整
 function defaultRow(definition: TypeDefinition | undefined): MaskRowState {
   const options = definition?.actionOptions ?? {};
   return {
@@ -50,10 +52,12 @@ export default function MaskPanel({
   stats,
   onMask,
 }: MaskPanelProps) {
+  // 入参 spans 已由父级剔除忽略项；这里只按类型 code 去重，一个类型对应一行配置
   const codes = useMemo(
     () => Array.from(new Set(spans.map((span) => span.type_code))),
     [spans],
   );
+  // 数组每轮渲染都是新引用，转成字符串作依赖，避免 effect 因引用变化反复执行
   const codesKey = codes.join("|");
   const [rows, setRows] = useState<Record<string, MaskRowState>>({});
 
@@ -84,6 +88,7 @@ export default function MaskPanel({
   };
 
   const handleMask = () => {
+    // 只有 mask 动作需要保留位数，其余动作传空 options，避免后端收到无意义参数
     const actions: MaskActions = {};
     for (const code of codes) {
       const row = rows[code] ?? defaultRow(byCode[code]);
@@ -123,6 +128,7 @@ export default function MaskPanel({
           <div className="mask-row" key={code}>
             <div className="mask-row-head">
               <span className="mask-row-name">{definition?.name ?? code}</span>
+              {/* 高敏类型用红色标签提示风险，其余保持默认色 */}
               <Tag color={definition?.level === "high" ? "red" : "default"}>{code}</Tag>
             </div>
             <Space wrap size={8}>
@@ -135,6 +141,7 @@ export default function MaskPanel({
                 onChange={(action) => updateRow(code, { action })}
               />
             </Space>
+            {/* 保留前后位数只对“屏蔽”动作有意义，因此随动作切换显示 */}
             {row.action === "mask" ? (
               <Space wrap size={8} style={{ marginTop: 8 }}>
                 <span className="mask-label">保留前</span>
@@ -175,6 +182,7 @@ export default function MaskPanel({
         </span>
       </Tooltip>
 
+      {/* 统计文案由后端返回；忽略数为 0 时省略，避免常态出现“忽略 0 处” */}
       {stats ? (
         <div className="mask-stats">
           识别 {stats.detected} 处 · 脱敏 {stats.applied} 处

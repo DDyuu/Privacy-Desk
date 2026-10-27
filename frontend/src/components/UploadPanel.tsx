@@ -1,3 +1,4 @@
+// 上传面板：拖拽或点击选择单个文件，交给后端解析后回调父级刷新文档列表。
 import { useState } from "react";
 import { InboxOutlined } from "@ant-design/icons";
 import { App, Upload } from "antd";
@@ -33,8 +34,10 @@ export default function UploadPanel({ onUploaded }: UploadPanelProps) {
       accept={ACCEPT}
       multiple={false}
       showUploadList={false}
+      // 上传中禁用拖拽区，防止并发上传打乱列表顺序或超出容量
       disabled={uploading}
       beforeUpload={(file) => {
+        // 返回 false 阻止 antd 自身上传，改由这里调用业务接口；不保留文件列表也使同一文件可再次选择
         void handleUpload(file);
         return false;
       }}

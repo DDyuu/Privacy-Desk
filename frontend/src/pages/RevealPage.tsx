@@ -1,3 +1,4 @@
+// 解密页：选择已脱敏文档，二次输入主密码后还原 ENC 令牌明文，结果只在本页展示
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -35,6 +36,7 @@ export default function RevealPage({ byCode }: RevealPageProps) {
       .list()
       .then((docs) => {
         setDocuments(
+          // 只有已脱敏/已校验的文档才可能包含可解密的 ENC 令牌，其余文档不列出
           docs.filter((doc) => doc.status === "masked" || doc.status === "verified"),
         );
       })
@@ -48,6 +50,7 @@ export default function RevealPage({ byCode }: RevealPageProps) {
   );
 
   const handleReveal = async () => {
+    // 主密码不落盘，解密时必须再次输入并交给后端校验，成功后才返回明文
     if (!docId) {
       message.warning("请先选择文档");
       return;
@@ -141,6 +144,7 @@ export default function RevealPage({ byCode }: RevealPageProps) {
             <Typography.Text type="secondary" style={{ display: "block", margin: "16px 0 8px" }}>
               {revealedName}：共 {items.length} 个明文片段
             </Typography.Text>
+            {/* 解密结果只在当前页面展示，切换文档会清空 items */}
             <Table
               rowKey={(item) => `${item.type_code}-${item.start}`}
               size="small"

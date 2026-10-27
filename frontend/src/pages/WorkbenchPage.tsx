@@ -1,3 +1,4 @@
+// 工作台页面：上传/选择文档 → 识别敏感信息 → 配置脱敏 → 对比导出，三个阶段由 Steps 串联
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { App, Button, Card, Empty, Space, Steps, Tag, Tooltip, Typography } from "antd";
@@ -29,6 +30,7 @@ const MODE_META: Record<SessionStatus["llm_mode"], { label: string; color: strin
 
 type Stage = "detection" | "mask" | "compare";
 
+// 忽略项用「起止偏移-类型编码」作为键：同一文档内位置+类型唯一，重新识别后仍能对上
 const spanKey = (span: Span) => `${span.start}-${span.end}-${span.type_code}`;
 
 const STAGE_INDEX: Record<Stage, number> = { detection: 0, mask: 1, compare: 2 };
@@ -75,7 +77,9 @@ export default function WorkbenchPage({
   const [refreshing, setRefreshing] = useState(false);
   const [clearing, setClearing] = useState(false);
 
+  // 异步请求返回时用户可能已切换到别的文档，用 ref 保存最新选中 ID 以便丢弃过期结果
   const selectedIdRef = useRef<string | null>(selectedId);
+  // 记录已自动触发过识别的文档，保证同一文档只自动识别一次
   const autoDetectedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -214,6 +218,7 @@ export default function WorkbenchPage({
         setDetail(doc);
         setSpans(doc.detections);
         if (doc.status === "masked" || doc.status === "verified") {
+          // 已脱敏/已校验的文档直接恢复到对比阶段，无需再次识别
           const restored = await loadComparison(doc.id);
           if (!cancelled && restored) setStage("compare");
         } else {
@@ -244,6 +249,7 @@ export default function WorkbenchPage({
     () => spans.filter((span) => !ignoredSet.has(spanKey(span))),
     [spans, ignoredSet],
   );
+  // 脱敏前提：文档已完成识别、存在未被忽略的敏感项，且当前没有识别任务在跑
   const canMask = Boolean(
     detail && detail.status !== "uploaded" && activeSpans.length > 0 && !detecting,
   );
@@ -311,6 +317,7 @@ export default function WorkbenchPage({
         setDetail(doc);
         setSpans(doc.detections);
         if (doc.status === "masked" || doc.status === "verified") {
+          // 刷新后重新拉取对比结果以恢复 compare；恢复失败则退回识别阶段重新开始
           const restored = await loadComparison(docId);
           if (selectedIdRef.current !== docId) return;
           if (restored) {
@@ -408,6 +415,7 @@ export default function WorkbenchPage({
             style={{ marginBottom: 16 }}
           />
 
+          {/* 三个阶段面板始终挂载，只用 display 切换，避免来回切换丢失面板内的配置状态 */}
           <div className="workbench-stage">
             <div style={{ display: stage === "detection" ? undefined : "none" }}>
               <DetectionTable
