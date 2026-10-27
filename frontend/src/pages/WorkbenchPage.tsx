@@ -32,6 +32,7 @@ type Stage = "detection" | "mask" | "compare";
 const spanKey = (span: Span) => `${span.start}-${span.end}-${span.type_code}`;
 
 const STAGE_INDEX: Record<Stage, number> = { detection: 0, mask: 1, compare: 2 };
+const STAGE_ORDER: Stage[] = ["detection", "mask", "compare"];
 const STAGE_TITLE: Record<Stage, string> = {
   detection: "识别结果",
   mask: "脱敏配置",
@@ -260,6 +261,14 @@ export default function WorkbenchPage({
     );
   };
 
+  /** 步骤条只允许回退：对比 → 配置/识别，配置 → 识别；前进仍由底部按钮触发 */
+  const handleStageChange = (next: number) => {
+    const target = STAGE_ORDER[next];
+    if (!target || STAGE_INDEX[target] >= STAGE_INDEX[stage]) return;
+    if (target === "mask" && activeSpans.length === 0) return;
+    setStage(target);
+  };
+
   const handleMask = async (actions: MaskActions) => {
     if (!selectedId) return;
     if (!canMask) {
@@ -390,7 +399,12 @@ export default function WorkbenchPage({
           <Steps
             size="small"
             current={STAGE_INDEX[stage]}
-            items={[{ title: "识别" }, { title: "脱敏配置" }, { title: "脱敏对比" }]}
+            onChange={handleStageChange}
+            items={[
+              { title: "识别" },
+              { title: "脱敏配置", disabled: STAGE_INDEX[stage] < STAGE_INDEX.mask },
+              { title: "脱敏对比", disabled: STAGE_INDEX[stage] < STAGE_INDEX.compare },
+            ]}
             style={{ marginBottom: 16 }}
           />
 
