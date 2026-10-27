@@ -17,7 +17,7 @@ BUILTIN_ENV_KEYS: tuple[dict[str, str], ...] = (
         "name": "DEEPSEEK_API_KEY",
         "provider": "DeepSeek",
         "base_url": "https://api.deepseek.com/v1",
-        "model": "deepseek-chat",
+        "model": "deepseek-flash",
     },
     {
         "name": "OPENAI_API_KEY",

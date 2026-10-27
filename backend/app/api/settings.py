@@ -15,7 +15,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 class LLMConfig(BaseModel):
     mode: Literal["online", "ollama", "rules"] = "online"
     base_url: str = "https://api.deepseek.com/v1"
-    model: str = "deepseek-chat"
+    model: str = "deepseek-flash"
     api_key: str = ""
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5:7b"

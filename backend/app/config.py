@@ -38,7 +38,7 @@ class Settings:
         default_factory=lambda: _env("PRIVACY_DESK_LLM_BASE", "https://api.deepseek.com/v1")
     )
     llm_model: str = field(
-        default_factory=lambda: _env("PRIVACY_DESK_LLM_MODEL", "deepseek-chat")
+        default_factory=lambda: _env("PRIVACY_DESK_LLM_MODEL", "deepseek-flash")
     )
     llm_api_key: str | None = field(default_factory=lambda: os.environ.get("PRIVACY_DESK_LLM_KEY"))
     ollama_url: str = field(

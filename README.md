@@ -42,7 +42,7 @@
 
 | 模式 | 说明 |
 | --- | --- |
-| 在线 API | 填写 Base URL、模型名、API Key。默认 `https://api.deepseek.com/v1` + `deepseek-chat`，也可填入任意 OpenAI 兼容服务地址。 |
+| 在线 API | 填写 Base URL、模型名、API Key。默认 `https://api.deepseek.com/v1` + `deepseek-flash`，也可填入任意 OpenAI 兼容服务地址。 |
 | 本地 Ollama | 填写 Ollama 地址（默认 `http://127.0.0.1:11434`）与模型名（默认 `qwen2.5:7b`）。 |
 | 纯规则 | 不联网，仅使用内置正则 / 校验位 / 关键词规则，适合完全离线的场景。 |
 

@@ -258,7 +258,7 @@ export default function SettingsPage({ onSessionRefresh }: SettingsPageProps) {
                 watchedMode === "online" ? [{ required: true, message: "在线模式需填写模型名称" }] : []
               }
             >
-              <Input placeholder="deepseek-chat" />
+              <Input placeholder="deepseek-flash" />
             </Form.Item>
             <Form.Item
               name="api_key"
