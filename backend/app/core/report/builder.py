@@ -1,3 +1,5 @@
+"""脱敏报告构建：先汇总为 JSON 字典，再由同一字典渲染 PDF，保证两种格式内容一致。"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -32,6 +34,8 @@ def build_json_report(
     by_type: dict[str, int] = {}
     for span in detections:
         by_type[span.type_code] = by_type.get(span.type_code, 0) + 1
+    # detected 是识别命中数，applied 是实际替换数，两者可能不等（如命中被规则排除）；
+    # verify 为 None 表示本次未做校验，residual/passed 以 null 表示"无结论"而非"通过"。
     return {
         "document": document,
         "mode": mode,
@@ -59,6 +63,7 @@ def build_pdf_report(report: dict) -> bytes:
         "title", parent=_STYLE, fontSize=18, leading=24, spaceAfter=12
     ))]
     summary = report["summary"]
+    # 文件名为外部输入，转义后再交给 reportlab 的迷你 HTML 解析，避免尖括号被当作标签
     story.append(Paragraph(f"文件：{_escape(report['document'])}", _STYLE))
     story.append(Paragraph(f"识别模式：{_escape(report['mode'])}", _STYLE))
     story.append(Paragraph(f"生成时间：{_escape(report['generated_at'])}", _STYLE))
@@ -88,6 +93,7 @@ def build_pdf_report(report: dict) -> bytes:
     story.append(Spacer(1, 10))
 
     if report["issues"]:
+        # issues 里可能包含命中的原文片段，同样需要转义
         story.append(Paragraph("校验问题", ParagraphStyle("h", parent=_STYLE, fontSize=12)))
         for issue in report["issues"]:
             story.append(Paragraph(f"· {_escape(issue)}", _STYLE))
@@ -97,6 +103,7 @@ def build_pdf_report(report: dict) -> bytes:
     detail_rows = [["起始", "结束", "类型", "方式", "替换结果"]]
     for item in report["applied"]:
         replacement = item["replacement"]
+        # 明细列宽固定 160pt，过长内容截断到 40 字符并加省略号，防止撑破表格
         if len(replacement) > 40:
             replacement = replacement[:40] + "…"
         detail_rows.append([

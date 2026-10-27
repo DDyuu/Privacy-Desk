@@ -1,3 +1,5 @@
+"""按扩展名分派加载/导出实现；TEXT_EXTS 中的纯文本格式共用同一条读写路径。"""
+
 from pathlib import Path
 
 from app.core.ingest.docx_loader import load_docx
@@ -10,6 +12,7 @@ TEXT_EXTS = {"txt", "md", "log", "py", "java", "js", "ts", "json", "csv", "eml"}
 
 
 def load_document(path: Path, ext: str) -> DocumentModel:
+    # 扩展名统一小写后再比对，避免 ".DOCX" 之类的写法落到不支持分支
     ext = ext.lower()
     if ext == "docx":
         return load_docx(Path(path))
@@ -32,6 +35,7 @@ def export_document(
         write_docx(model, masked_text, Path(out_path), applied)
         return
     if ext == "pdf":
+        # PDF 没有可原地改写的段落对象，只能按脱敏后文本整篇重建
         write_pdf(masked_text, Path(out_path))
         return
     if ext in TEXT_EXTS:

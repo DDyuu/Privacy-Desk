@@ -1,3 +1,5 @@
+"""大模型识别：分块 → 预遮蔽 → 请求 → 片段回定位，结果与规则结果同构。"""
+
 from __future__ import annotations
 
 import hashlib
@@ -11,8 +13,11 @@ from app.core.detect.rule_engine import Span, _find_all
 from app.core.detect.types import TypeDefinition
 from app.llm.client import BaseLLM
 
+# 单字符片段几乎都是噪声，同时会放大误命中
 MIN_FRAGMENT_LEN = 2
+# 同一片段在块内大量重复时设上限，避免一个高频词刷满 span
 MAX_HITS_PER_FRAGMENT = 20
+# 单篇文档的结果上限，防止超长文本拖垮后续融合与脱敏
 MAX_SPANS = 500
 
 _LABEL_SEPARATOR = re.compile(r"^[\u4e00-\u9fa5]{2,8}\s*[:：=＝\-—]\s*")
@@ -51,12 +56,14 @@ class LLMEngine:
         self._cache: dict[str, list[dict]] = {}
 
     def _cache_key(self, chunk: str, hints: list[dict]) -> str:
+        # 键里带上提示词：类型配置变更后旧缓存自动失效
         payload = chunk + "\x00" + json.dumps(hints, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def detect(self, text: str, high_spans: list[Span]) -> list[Span]:
         if not self._client.available():
             return []
+        # 只把启用且声明了 llm 检测器的类型交给模型，减少无关类别干扰
         hints = [
             {
                 "code": definition.code,
@@ -77,6 +84,7 @@ class LLMEngine:
                 continue
             local_high = [
                 Span(
+                    # 裁剪到块范围后减去块起点，换成块内坐标供预遮蔽使用
                     max(span.start, start) - start,
                     min(span.end, end) - start,
                     span.type_code,
@@ -94,6 +102,7 @@ class LLMEngine:
                 items = self._cache[key]
             else:
                 items = self._client.extract(redacted, hints)
+                # 简单封顶即可，避免长期运行后缓存无限增长
                 if len(self._cache) < 128:
                     self._cache[key] = items
             for item in items:
@@ -102,7 +111,9 @@ class LLMEngine:
                 if (
                     code not in allowed
                     or len(fragment) < MIN_FRAGMENT_LEN
+                    # 含遮蔽符说明模型把占位符当成了实体，回定位必然失败
                     or "█" in fragment
+                    # 超长片段多半是模型整段复述，不是单个隐私值
                     or len(fragment) > 200
                 ):
                     continue
@@ -113,6 +124,7 @@ class LLMEngine:
                 if not math.isfinite(confidence):
                     confidence = 0.7
                 confidence = min(max(confidence, 0.0), 1.0)
+                # 模型返回的是文本而非偏移，块内所有相同出现位置都要覆盖
                 positions = list(_find_all(chunk, fragment))[:MAX_HITS_PER_FRAGMENT]
                 for position in positions:
                     key_span = (start + position, start + position + len(fragment), code)
@@ -126,6 +138,7 @@ class LLMEngine:
                         levels.get(code, "medium"),
                     )
                     if key_span not in found or candidate.confidence > found[key_span].confidence:
+                        # 重叠分块会让同一实体在相邻块各命中一次，按 (起,止,类型) 去重并保留高置信度
                         found[key_span] = candidate
                     if len(found) >= MAX_SPANS:
                         break

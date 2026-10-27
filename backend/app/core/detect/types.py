@@ -1,3 +1,5 @@
+"""隐私类型定义（内置 + 自定义）与运行期注册表。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,6 +16,7 @@ class Detector(BaseModel):
     words: list[str] = Field(default_factory=list)
     hint: str | None = None
     confidence: float | None = None
+    # strip：校验位算法前要剔除的分隔符（如身份证号里的空格、短横）
     strip: str | None = None
 
 
@@ -38,9 +41,11 @@ class TypeRegistry:
         self._types: dict[str, TypeDefinition] = {item.code: item for item in types}
 
     def list(self) -> list[TypeDefinition]:
+        # 供识别链路使用：只暴露启用中的类型
         return [item for item in self._types.values() if item.enabled]
 
     def all(self) -> list[TypeDefinition]:
+        # 含禁用项：生成默认脱敏配置时需要完整清单
         return list(self._types.values())
 
     def get(self, code: str) -> TypeDefinition:

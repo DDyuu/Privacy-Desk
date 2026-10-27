@@ -1,3 +1,5 @@
+"""脱敏执行：按类型配置选择遮蔽 / 替换 / 模糊 / 加密，并记录偏移映射。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,6 +14,7 @@ VALID_ACTIONS = {"mask", "replace", "fuzz", "encrypt"}
 @dataclass
 class MaskResult:
     masked_text: str
+    # applied 保留原文坐标系下的起止位置，导出时据此重映射偏移
     applied: list[dict]
     mapping_size: int
 
@@ -55,9 +58,11 @@ class MaskEngine:
     def apply(self, text: str, spans: list[Span], aad_prefix: str = "doc") -> MaskResult:
         ordered = sorted(spans, key=lambda item: item.start)
         for previous, current in zip(ordered, ordered[1:]):
+            # 重叠 span 无法确定替换次序，必须先由融合阶段消解
             if current.start < previous.end:
                 raise ValueError("识别结果存在重叠，无法脱敏")
         for span in ordered:
+            # 原文可能已变化，偏移或文本对不上时拒绝执行，避免改错位置
             if not (0 <= span.start <= span.end <= len(text)) or text[span.start:span.end] != span.text:
                 raise ValueError("识别结果与原文不一致，无法脱敏")
         counters: dict[str, int] = {}
@@ -69,7 +74,9 @@ class MaskEngine:
             options = spec.get("options") or {}
             if action == "replace":
                 key = (span.type_code, span.text)
+                # 同类型同值共用同一编号，保持文档内指代一致（便于人工比对）
                 if key not in mapping:
+                    # 计数器按类型独立，[手机号_1] 与 [姓名_1] 互不影响
                     count = counters.get(span.type_code, 0) + 1
                     counters[span.type_code] = count
                     label = self._registry.get(span.type_code).name
@@ -78,6 +85,7 @@ class MaskEngine:
             elif action == "fuzz":
                 replacement = fuzz_value(span.text, span.type_code)
             elif action == "encrypt":
+                # AAD 绑定文档 / 类型 / 偏移：令牌被搬到别处解密即失败
                 aad = f"{aad_prefix}:{span.type_code}:{span.start}".encode("utf-8")
                 replacement = encrypt_value(span.text, self._key, aad)
             else:
@@ -88,6 +96,7 @@ class MaskEngine:
                 )
             replacements.append((span, action, replacement))
         masked = text
+        # 从后往前替换：先动尾部，前面 span 的偏移才不会失效
         for span, _, replacement in sorted(replacements, key=lambda item: -item[0].start):
             masked = masked[: span.start] + replacement + masked[span.end:]
         applied = [

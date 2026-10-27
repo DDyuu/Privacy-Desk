@@ -1,3 +1,5 @@
+"""确定性识别：正则 / 关键词 / 词典 / 校验位，产出可直接定位的 Span。"""
+
 from __future__ import annotations
 
 import re
@@ -16,6 +18,7 @@ class Span:
     confidence: float
     source: str
     level: str = "medium"
+    # ignored：用户显式排除的片段，进入报告但不参与脱敏与风险判定
     ignored: bool = False
 
     def to_dict(self) -> dict:
@@ -32,6 +35,7 @@ class Span:
 
 
 def _find_all(text: str, needle: str):
+    # 每次只前进 1 个字符，允许命中相互重叠，避免漏掉紧邻重复的片段
     start = 0
     while True:
         index = text.find(needle, start)
@@ -50,6 +54,7 @@ class RuleEngine:
     def detect(self, text: str) -> list[Span]:
         spans: list[Span] = []
         for definition in self._types:
+            # 校验算法与剔除字符按类型整体生效，取该类型第一个声明的即可
             checksum = next(
                 (d.algo for d in definition.detectors if d.kind == "checksum" and d.algo), None
             )
@@ -59,6 +64,7 @@ class RuleEngine:
             candidates: list[tuple[int, int, float]] = []
             for detector in definition.detectors:
                 if detector.kind == "regex" and detector.pattern:
+                    # 只支持 i 标志：大小写不敏感是本链路唯一实际需要的开关
                     flags = re.IGNORECASE if "i" in detector.flags else 0
                     confidence = 0.9 if detector.confidence is None else detector.confidence
                     for match in re.finditer(detector.pattern, text, flags):
@@ -75,13 +81,16 @@ class RuleEngine:
                         for position in _find_all(text, word):
                             candidates.append((position, position + len(word), 0.8))
             kept: list[tuple[int, int, float]] = []
+            # 同起点优先保留更长的候选：(起点升序, 长度降序)
             for start, end, confidence in sorted(
                 candidates, key=lambda item: (item[0], -(item[1] - item[0]))
             ):
                 if kept and start < kept[-1][1]:
+                    # 已按起点升序处理，只需与最近保留项比较；重叠即丢弃（贪心去重）
                     continue
                 target = text[start:end]
                 if strip_chars:
+                    # 校验位算法对分隔符敏感，先剔除再比对
                     target = target.translate(str.maketrans("", "", strip_chars))
                 if checksum and not validate_checksum(checksum, target):
                     continue
@@ -93,6 +102,7 @@ class RuleEngine:
                         end=end,
                         type_code=definition.code,
                         text=text[start:end],
+                        # 校验位通过后误报概率极低，直接抬到接近确定性的置信度
                         confidence=0.99 if checksum else confidence,
                         source="rule",
                         level=definition.level,

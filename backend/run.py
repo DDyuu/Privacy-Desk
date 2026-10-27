@@ -1,3 +1,5 @@
+"""后端启动入口：先兜底标准流，再在本机回环地址上起服务，供桌面壳内嵌调用。"""
+
 import os
 import sys
 
@@ -18,6 +20,7 @@ def main() -> None:
     settings = Settings()
     uvicorn.run(
         create_app(settings),
+        # 只绑定回环地址，避免桌面端把包含隐私数据的接口暴露到局域网
         host="127.0.0.1",
         port=int(os.environ.get("PRIVACY_DESK_PORT", "8765")),
         log_level="warning",

@@ -1,3 +1,5 @@
+"""文档/版本/识别结果等数据访问层；写库前统一用数据密钥加密，AAD 绑定行标识。"""
+
 from __future__ import annotations
 
 import json
@@ -22,6 +24,8 @@ class Repository:
         self._vault = vault
 
     def _enc_bytes(self, data: bytes, aad: str) -> bytes:
+        # AAD 由"用途 + 行 id"拼成，解密时 AAD 不一致会直接认证失败：
+        # 这样同一数据密钥下的密文无法被挪到其它文档、版本或字段复用。
         return crypto.encrypt(self._vault.data_key(), data, aad.encode("utf-8"))
 
     def _dec_bytes(self, blob: bytes, aad: str) -> bytes:
@@ -88,6 +92,7 @@ class Repository:
         with self._db.connect() as conn:
             row = conn.execute(
                 "SELECT id FROM doc_versions WHERE doc_id=? AND kind=?"
+                # created_at 精度只到秒，同一秒内写入多条时用 rowid 兜底取最后插入那条
                 " ORDER BY created_at DESC, rowid DESC LIMIT 1",
                 (doc_id, kind),
             ).fetchone()
@@ -159,6 +164,7 @@ class Repository:
     def delete_all_documents(self) -> int:
         """清空全部文档；版本、识别、脱敏、报告由外键级联删除。"""
         with self._db.connect() as conn:
+            # 必须先置空：batch_items.doc_id 没有外键，不会随 documents 删除而级联
             conn.execute("UPDATE batch_items SET doc_id=NULL")
             deleted = conn.execute("DELETE FROM documents").rowcount
         return int(deleted)
@@ -172,6 +178,7 @@ class Repository:
 
     def save_detections(self, doc_id: str, version_id: str, spans: list) -> None:
         with self._db.connect() as conn:
+            # 整体覆盖旧结果，避免重新识别后新旧偏移区间混在一起
             conn.execute("DELETE FROM detections WHERE doc_id=?", (doc_id,))
             for span in spans:
                 det_id = uuid.uuid4().hex
@@ -360,6 +367,7 @@ class Repository:
 
     def audit(self, action: str, detail: dict) -> None:
         with self._db.connect() as conn:
+            # 审计明细以明文存 TEXT 列（不加密），调用方不要把敏感原文放进 detail
             conn.execute(
                 "INSERT INTO audit_logs(id,action,detail,created_at) VALUES(?,?,?,?)",
                 (uuid.uuid4().hex, action, json.dumps(detail, ensure_ascii=False), now_iso()),

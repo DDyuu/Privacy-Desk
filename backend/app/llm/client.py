@@ -1,3 +1,5 @@
+"""大模型客户端：在线 OpenAI 兼容接口、本机 Ollama，以及宽松的 JSON 数组解析。"""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +23,7 @@ class LLMError(RuntimeError):
 
 
 def load_prompt() -> str:
+    """优先从加密资源包读取提示词；强制加密模式下解密失败必须抛出，不能静默退回内置明文。"""
     try:
         from app.core.security.resources import load_prompt as load_resource_prompt
 
@@ -32,9 +35,11 @@ def load_prompt() -> str:
 
 
 def parse_json_array(content: str) -> list[dict]:
+    """容忍代码块标记和前后杂文本，尽量从模型输出中解析出对象数组；失败返回空列表。"""
     if not isinstance(content, str):
         return []
     text = content.strip()
+    # 有些模型会包一层 ```json ... ```，先剥掉再解析
     if text.startswith("```"):
         text = text.strip("`").strip()
         if text.lower().startswith("json"):
@@ -72,6 +77,8 @@ class BaseLLM:
 
 
 class NullLLM(BaseLLM):
+    """规则模式占位客户端：不可用且不产出结果，保证调用方代码路径一致。"""
+
     name = "rules"
 
     def extract(self, text: str, hints: list[dict]) -> list[dict]:
@@ -89,6 +96,7 @@ class OpenAICompatLLM(BaseLLM):
         timeout: float = 30.0,
         client: httpx.Client | None = None,
     ) -> None:
+        # 允许传入 base_url 以适配任何 OpenAI 兼容服务，统一补上 chat/completions 路径
         self._url = base_url.rstrip("/") + "/chat/completions"
         self._api_key = api_key
         self._model = model
@@ -116,6 +124,8 @@ class OpenAICompatLLM(BaseLLM):
             ],
         }
         last_error = None
+        # 最多 3 次尝试，间隔 0.3/0.6/0.9 秒；只重试网络与响应类异常，
+        # 内容格式非法（LLMError）重试也不会变好，直接上抛。
         for attempt in range(3):
             try:
                 response = self._client.post(
@@ -166,6 +176,7 @@ def probe_ollama(
             "message": f"无法连接 {target}：{exc}",
         }
     finally:
+        # 只关闭自建连接，调用方传入的 client 由调用方负责生命周期
         if owns_client:
             http_client.close()
 
@@ -176,6 +187,7 @@ def probe_ollama(
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     ]
     wanted = (model or "").strip()
+    # Ollama 返回的名字可能带 :tag 后缀，所以精确匹配之外也接受 "名字:" 前缀
     model_present = bool(wanted) and any(
         name == wanted or name.startswith(f"{wanted}:") for name in models
     )
@@ -200,6 +212,7 @@ class OllamaLLM(BaseLLM):
         timeout: float = 60.0,
         client: httpx.Client | None = None,
     ) -> None:
+        # 本机模型冷启动和首次推理较慢，默认超时比在线接口更宽松
         self._url = base_url.rstrip("/") + "/api/chat"
         self._model = model
         self._client = client or httpx.Client(timeout=timeout)
@@ -217,6 +230,7 @@ class OllamaLLM(BaseLLM):
         payload = {
             "model": self._model,
             "stream": False,
+            # 让 Ollama 以 JSON 模式作答，减少需要容错解析的杂文本
             "format": "json",
             "options": {"temperature": 0},
             "messages": [
@@ -228,6 +242,7 @@ class OllamaLLM(BaseLLM):
             ],
         }
         last_error = None
+        # 与在线客户端一致：3 次尝试、线性退避，内容格式错误不再重试
         for attempt in range(3):
             try:
                 response = self._client.post(self._url, json=payload)

@@ -1,3 +1,5 @@
+"""自定义识别类型接口：列表、正则生成、保存/删除与样本试跑。"""
+
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -51,6 +53,8 @@ def save_type(
         raise HTTPException(403, "内置类型不可覆盖")
     if not payload.detectors:
         raise HTTPException(400, "至少需要一个识别器")
+    # 正则先预编译再落库：非法表达式在这里就挡下，
+    # 否则保存成功后每次识别都会在运行期抛 re.error。
     for detector in payload.detectors:
         if detector.kind == "regex":
             try:
@@ -80,6 +84,7 @@ def delete_type(code: str, ctx: AppContext = Depends(get_context)) -> dict:
 
 @router.post("/test")
 def test_type(payload: TypeTestIn, ctx: AppContext = Depends(get_context)) -> dict:
+    """只用规则引擎试跑样本，不触发大模型调用，便于快速校验正则与关键词。"""
     require_unlocked(ctx)
     engine = RuleEngine([payload.type])
     try:

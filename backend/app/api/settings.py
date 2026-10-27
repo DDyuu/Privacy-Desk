@@ -1,3 +1,5 @@
+"""运行期设置接口：LLM 模式与 Key 来源探测，对外只暴露掩码信息。"""
+
 import time
 from typing import Literal
 
@@ -23,6 +25,7 @@ class LLMConfig(BaseModel):
 
 
 def _public(ctx: AppContext, names: list[str] | None = None, source: str | None = None) -> dict:
+    """组装可回传前端的配置视图：明文 Key 不出后端，只给来源和掩码。"""
     config = ctx.llm_service.config()
     key_source = ctx.llm_service.key_source() if source is None else source
     return {
@@ -31,6 +34,7 @@ def _public(ctx: AppContext, names: list[str] | None = None, source: str | None 
         "model": config.get("model", ""),
         "ollama_url": config.get("ollama_url", ""),
         "ollama_model": config.get("ollama_model", ""),
+        # 预览场景以临时探测出的来源为准，避免与 env-keys 的结果互相矛盾
         "has_key": bool(config.get("api_key")) if source is None else source != "none",
         "key_source": key_source,
         "env_keys": ctx.llm_service.env_key_candidates(names, key_source),
@@ -48,6 +52,7 @@ def get_llm(ctx: AppContext = Depends(get_context)) -> dict:
 def detect_env_keys(names: str | None = None, ctx: AppContext = Depends(get_context)) -> dict:
     """按当前表单中的变量名即时扫描环境变量（names 为空时只扫描内置变量）。"""
     require_unlocked(ctx)
+    # 前端以逗号分隔传入自定义变量名；空项交给 normalize_names 统一过滤
     parsed = None if names is None else [name for name in names.split(",") if name.strip()]
     custom = parsed or []
     return _public(ctx, custom, ctx.llm_service.preview_key_source(custom))
@@ -60,6 +65,7 @@ def put_llm(payload: LLMConfig, ctx: AppContext = Depends(get_context)) -> dict:
     if not config["api_key"]:
         # 只继承已落库的 Key，避免把环境变量里的 Key 复制进数据库
         config["api_key"] = ctx.llm_service.stored_api_key()
+    # 变量名先按标识符格式清洗、去重并限条，再随配置落库
     config["env_key_names"] = normalize_names(config["env_key_names"])
     ctx.llm_service.set_config(config)
     ctx.repo.audit("settings.llm", {"mode": config["mode"]})
@@ -87,6 +93,7 @@ def test_llm(ctx: AppContext = Depends(get_context)) -> dict:
     require_unlocked(ctx)
     mode = ctx.llm_service.mode()
     if mode == "rules":
+        # 纯规则模式不是错误，用 ok=False 让前端展示“未配置模型”的提示
         return {"ok": False, "mode": "rules", "message": "未配置在线或本地模型"}
     client = ctx.llm_service.build_client()
     started = time.perf_counter()

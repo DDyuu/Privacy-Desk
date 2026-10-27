@@ -1,3 +1,5 @@
+"""LLM 服务层：合并默认配置与落库配置，解析 Key 来源，并实现 online→ollama→rules 降级链。"""
+
 from __future__ import annotations
 
 from app.config import Settings
@@ -15,6 +17,7 @@ class LLMService:
         self._settings = settings
 
     def _stored(self) -> dict:
+        # 配置读取失败按“未配置”处理，避免数据库异常直接拖垮会话状态等基础接口
         try:
             return self._repo.get_setting("llm") or {}
         except Exception:
@@ -32,6 +35,7 @@ class LLMService:
         saved = self.stored_api_key()
         if saved:
             return saved, "stored"
+        # 已保存的 Key 优先；否则按内置清单在前、自定义清单在后的顺序取首个命中的变量
         for item in detect_env_keys(self.env_key_names()):
             return item["value"], f"env:{item['name']}"
         return "", "none"
@@ -76,6 +80,7 @@ class LLMService:
         }
 
     def config(self) -> dict:
+        """默认配置与落库配置合并；落库值覆盖默认值。"""
         stored = self._stored()
         merged = {**self.default_config(), **stored}
         key, _ = self._resolve_key()
@@ -91,9 +96,11 @@ class LLMService:
         self._repo.set_setting("llm", config)
 
     def mode(self) -> str:
+        """对外的实际生效模式：online 必须同时具备 mode 与 Key，否则按配置降级。"""
         config = self.config()
         if config.get("mode") == "online" and config.get("api_key"):
             return "online"
+        # 选了在线却没有可用 Key 时不会报错，而是退到规则模式
         if config.get("mode") == "ollama":
             return "ollama"
         return "rules"
@@ -117,6 +124,7 @@ class LLMService:
     def detect(
         self, text: str, high_spans: list[Span], types: list[TypeDefinition]
     ) -> tuple[list[Span], str]:
+        """按 online→ollama→rules 依次尝试；前一级报错就降级，全部失败则只保留规则结果。"""
         config = self.config()
         attempts: list[tuple[str, object]] = []
         if config.get("mode") == "online" and config.get("api_key"):
@@ -128,10 +136,12 @@ class LLMService:
                     ),
                 )
             )
+        # 在线模式也把 ollama 作为兜底加入；纯 ollama 模式则只有它自己
         if config.get("mode") == "ollama" or attempts:
             attempts.append(
                 (
                     "ollama",
+                    # 兜底调用不应拖慢整体识别，所以用比独立调用更短的 5 秒超时
                     OllamaLLM(
                         config.get("ollama_url", ""),
                         config.get("ollama_model", ""),

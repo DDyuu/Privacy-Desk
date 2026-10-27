@@ -1,3 +1,5 @@
+"""文档接口：上传、识别、脱敏、对比、导出与 ENC 令牌解密。"""
+
 import json
 import shutil
 import tempfile
@@ -45,6 +47,7 @@ async def upload(
     file: UploadFile = File(...), ctx: AppContext = Depends(get_context)
 ) -> dict:
     require_unlocked(ctx)
+    # 单机数据库会随文档增长，先用总数限制挡住无限上传，再谈单文件大小
     if ctx.repo.count_documents() >= ctx.settings.max_docs:
         raise HTTPException(
             409, f"文档数量已达上限（{ctx.settings.max_docs}），请先清理历史文档"
@@ -162,6 +165,7 @@ def reveal(
 ) -> dict:
     """解密该文档中以“加密”方式处理的 ENC 令牌，需再次校验主密码。"""
     require_unlocked(ctx)
+    # ENC 令牌能还原出原始隐私值，敏感度等同明文，因此即使会话已解锁也要重新验密
     verify_password(ctx, payload.password, "解密 ENC 令牌")
     try:
         document = ctx.repo.get_document(doc_id)
@@ -202,12 +206,15 @@ def export(
                     "Content-Disposition": f'attachment; filename="report.{report_format}"'
                 },
             )
+        # 脱敏文本里只剩掩码或 ENC 令牌，不含原文，因此导出掩码文件不再二次验密
         if document["status"] in {"uploaded", "detected"}:
             raise HTTPException(409, "尚未完成有效脱敏，禁止导出")
         if fmt not in {"auto", document["ext"]}:
             raise HTTPException(400, "仅支持按原格式导出")
         masked = ctx.repo.get_text(doc_id, "masked")
         ext = document["ext"] if fmt == "auto" else fmt
+        # 导出文件放独立临时目录：不在数据目录留下明文副本，
+        # 也不与并发导出互相覆盖。
         workdir = Path(tempfile.mkdtemp())
         target = workdir / f"masked.{ext}"
         if ext == "docx":
@@ -225,6 +232,7 @@ def export(
         return FileResponse(
             target,
             filename=f"masked.{ext}",
+            # 响应体发送完后才删临时目录，避免文件还在传输时就被清理
             background=BackgroundTask(shutil.rmtree, workdir, ignore_errors=True),
         )
     except KeyError as exc:

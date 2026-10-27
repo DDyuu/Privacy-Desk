@@ -1,3 +1,5 @@
+"""文档处理主链路：上传入库 → 识别 → 脱敏 → 校验 → 报告落库。"""
+
 from __future__ import annotations
 
 import hashlib
@@ -22,12 +24,14 @@ from app.core.security import crypto
 if TYPE_CHECKING:
     from app.context import AppContext
 
+# 白名单只收能解析成纯文本或可转 docx 的格式，避免二进制/压缩包流入解析器
 ALLOWED_EXTS = {
     "txt", "md", "log", "py", "java", "js", "ts", "json", "csv", "eml", "docx", "pdf", "doc",
 }
 
 
 def convert_doc_to_docx(source: Path, workdir: Path) -> Path:
+    """借用无头 LibreOffice 把旧版 .doc 转成 docx，之后统一走 docx 解析。"""
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
         raise ValueError("未检测到 LibreOffice，无法处理 .doc 文件")
@@ -35,6 +39,7 @@ def convert_doc_to_docx(source: Path, workdir: Path) -> Path:
         [soffice, "--headless", "--convert-to", "docx", "--outdir", str(workdir), str(source)],
         check=True,
         capture_output=True,
+        # 转换是外部进程，超时兜底防止个别文档把请求挂死
         timeout=120,
     )
     target = workdir / (source.stem + ".docx")
@@ -49,7 +54,9 @@ def create_document_from_bytes(ctx: "AppContext", filename: str, raw: bytes) -> 
         raise ValueError(f"不支持的文件类型：{ext or '未知'}")
     if len(raw) > ctx.settings.max_upload_mb * 1024 * 1024:
         raise ValueError(f"文件超过 {ctx.settings.max_upload_mb}MB 限制")
+    # 只取文件名，剥离任何目录部分，防止 "../" 形式的路径穿越
     safe_name = Path(filename).name
+    # 临时目录随 with 退出即删，持久化的只有解析文本和原始字节
     with tempfile.TemporaryDirectory() as temp_dir:
         workdir = Path(temp_dir)
         path = workdir / safe_name
@@ -63,6 +70,7 @@ def create_document_from_bytes(ctx: "AppContext", filename: str, raw: bytes) -> 
             raise ValueError(f"文档解析失败：{exc}") from exc
         text = model.text
         source_bytes = path.read_bytes()
+    # 指纹记录上传的原始字节（而非转换后的 docx），便于事后核对文件来源
     doc_id = ctx.repo.create_document(
         safe_name, ext, text, hashlib.sha256(raw).hexdigest()
     )
@@ -95,6 +103,7 @@ def detect_document(ctx: "AppContext", doc_id: str, use_llm: bool = True) -> dic
     if use_llm:
         llm_spans, mode = ctx.llm_service.detect(text, rule_spans, types)
     spans = fuse(rule_spans, llm_spans, types)
+    # 识别结果挂在原文版本上，避免后续脱敏版本覆盖后检测记录错位
     version_id = ctx.repo.latest_version_id(doc_id, "original")
     ctx.repo.save_detections(doc_id, version_id, spans)
     ctx.repo.save_version(doc_id, "mode", mode)
@@ -115,6 +124,7 @@ def mask_document(
         raise ValueError("请先执行识别，再脱敏")
     original = ctx.repo.get_text(doc_id, "original")
     all_spans = _spans_from_rows(ctx.repo.get_detections(doc_id))
+    # 忽略键由「起始-结束-类型」拼成：偏移会随重新识别变化，必须与原记录一一对应
     if ignored_keys:
         all_spans = [
             replace(span, ignored=True)
@@ -126,6 +136,7 @@ def mask_document(
     spans = [span for span in all_spans if not span.ignored]
     started = time.perf_counter()
     engine = MaskEngine(ctx.vault.data_key(), ctx.types, actions)
+    # AAD 绑定文档 ID：加密令牌被复制到其他文档后无法解密
     result = engine.apply(original, spans, aad_prefix=doc_id)
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     verify_result = None
@@ -134,6 +145,7 @@ def mask_document(
             original, result.masked_text, ignored_spans
         )
         if len(spans) == 0:
+            # 无实际替换时校验必然“通过”，必须显式提示，否则会被误读为已安全脱敏
             verify_result.issues.append(
                 "识别结果已全部被忽略，未执行脱敏"
                 if ignored_spans
@@ -248,6 +260,7 @@ def reveal_encrypted(ctx: "AppContext", doc_id: str) -> list[dict]:
         token = str(entry.get("replacement") or "")
         if not token.startswith("ENC:"):
             continue
+        # AAD 必须与加密时逐字节一致（文档:类型:起始偏移），否则解密必然失败
         aad = f"{doc_id}:{entry.get('type_code', '')}:{entry.get('start', 0)}".encode("utf-8")
         try:
             plain = crypto.decrypt(key, crypto.b64url_decode(token[4:]), aad).decode("utf-8")
@@ -285,8 +298,10 @@ def process_batch(
             mask_document(ctx, doc_id, verify=True)
             ctx.repo.update_batch_item(item_id, "done", "", doc_id)
         except Exception as exc:
+            # 截断错误信息，防止超长堆栈写满批次状态记录
             ctx.repo.update_batch_item(item_id, "failed", str(exc)[:200])
 
+    # 并发 2 足够：链路中含外部大模型调用，并发更高易触发限流
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [
             executor.submit(run_one, item_id, item)

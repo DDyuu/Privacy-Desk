@@ -1,3 +1,5 @@
+"""文档块模型：以换行拼接块文本，并为每块记录其在全文中的偏移区间。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -8,6 +10,7 @@ from typing import Any
 class Block:
     kind: str
     text: str
+    # start/end 为左闭右开区间，指向 DocumentModel.text；build_model 之前两者均为 0
     start: int = 0
     end: int = 0
     ref: Any = None
@@ -26,6 +29,7 @@ def build_model(blocks: list[Block], fmt: str, meta: dict | None = None) -> Docu
     parts: list[str] = []
     cursor = 0
     for block in blocks:
+        # 块间固定插入一个 "\n"，所以下一块起点是上一块 end + 1（而不是 +0）
         block.start = cursor
         block.end = cursor + len(block.text)
         parts.append(block.text)
