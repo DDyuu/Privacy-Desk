@@ -17,6 +17,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _default_resources() -> Path:
     """源码运行时用 backend/resources，PyInstaller 冻结后优先用 _MEIPASS/resources。"""
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -51,6 +58,10 @@ class Settings:
     )
     ollama_model: str = field(
         default_factory=lambda: _env("PRIVACY_DESK_OLLAMA_MODEL", "qwen2.5:7b")
+    )
+    # 本地模型冷启动与首 token 可能远超 5 秒，默认给足 120 秒，可用环境变量覆盖
+    ollama_timeout: float = field(
+        default_factory=lambda: _env_float("PRIVACY_DESK_OLLAMA_TIMEOUT", 120.0)
     )
     # 以下三个加固开关默认关闭，正式分发时由启动脚本/构建流程显式打开
     enforce_integrity: bool = field(

@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from app.llm.client import NullLLM, OllamaLLM, OpenAICompatLLM, parse_json_array
+from app.llm.client import LLMError, NullLLM, OllamaLLM, OpenAICompatLLM, parse_json_array
 
 
 def test_parse_json_array_with_code_fence():
@@ -66,3 +66,17 @@ def test_non_string_content_raises_llm_error():
 
 def test_parse_single_object_wrapped():
     assert parse_json_array('{"type":"NAME_CN","text":"张三"}')[0]["text"] == "张三"
+
+
+def test_ollama_timeout_is_not_retried():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        raise httpx.ReadTimeout("slow model", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    llm = OllamaLLM("http://127.0.0.1:11434", "qwen2.5:7b", client=client)
+    with pytest.raises(LLMError):
+        llm.extract("张三", [])
+    assert calls["count"] == 1

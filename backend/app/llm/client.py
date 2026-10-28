@@ -258,6 +258,9 @@ class OllamaLLM(BaseLLM):
                     raise LLMError("模型返回内容格式非法")
                 self.last_raw = content
                 return parse_json_array(content)
+            except httpx.TimeoutException as exc:
+                # 超时通常意味着模型在冷启动或本身过慢，重试只会成倍放大等待
+                raise LLMError(f"本地模型调用超时：{exc}") from exc
             except LLMError:
                 raise
             except Exception as exc:

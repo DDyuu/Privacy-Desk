@@ -110,7 +110,11 @@ class LLMService:
         if config.get("mode") == "online" and config.get("api_key"):
             return OpenAICompatLLM(config["base_url"], config["api_key"], config["model"])
         if config.get("mode") == "ollama":
-            return OllamaLLM(config.get("ollama_url", ""), config.get("ollama_model", ""))
+            return OllamaLLM(
+                config.get("ollama_url", ""),
+                config.get("ollama_model", ""),
+                timeout=self._settings.ollama_timeout,
+            )
         return NullLLM()
 
     def _engine(self, client, types: list[TypeDefinition]) -> LLMEngine:
@@ -141,11 +145,11 @@ class LLMService:
             attempts.append(
                 (
                     "ollama",
-                    # 兜底调用不应拖慢整体识别，所以用比独立调用更短的 5 秒超时
+                    # 冷启动/首次推理很慢，兜底也沿用同一超时，避免刚加载就被判失败
                     OllamaLLM(
                         config.get("ollama_url", ""),
                         config.get("ollama_model", ""),
-                        timeout=5.0,
+                        timeout=self._settings.ollama_timeout,
                     ),
                 )
             )
