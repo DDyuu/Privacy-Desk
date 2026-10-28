@@ -51,7 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     _check_startup_settings(settings)
     ctx = build_context(settings)
-    app = FastAPI(title="Privacy Desk", version="0.1.0")
+    app = FastAPI(title="Privacy Desk", version="0.2.1")
     app.state.ctx = ctx
     app.state.settings = settings
 
