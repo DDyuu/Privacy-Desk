@@ -38,6 +38,39 @@ def test_json_report_contains_summary_and_detections():
     assert report["detections"][0]["type_code"] == "PHONE_CN"
 
 
+def test_json_report_includes_llm_calls():
+    report = build_json_report(
+        "样例.txt",
+        "online",
+        [],
+        [],
+        None,
+        {},
+        llm={
+            "mode": "online",
+            "calls": [
+                {
+                    "index": 0,
+                    "raw": '[{"type":"NAME_CN"}]',
+                    "items": 1,
+                    "cached": False,
+                    "elapsed_ms": 12,
+                }
+            ],
+            "truncated": False,
+        },
+    )
+    assert report["llm"]["mode"] == "online"
+    assert report["llm"]["calls"][0]["raw"] == '[{"type":"NAME_CN"}]'
+    assert report["llm"]["truncated"] is False
+
+
+def test_json_report_defaults_to_empty_llm_calls():
+    report = sample()
+    assert report["llm"]["calls"] == []
+    assert report["llm"]["truncated"] is False
+
+
 def test_pdf_report_is_valid_pdf():
     payload = build_pdf_report(sample())
     assert payload.startswith(b"%PDF")
@@ -58,3 +91,19 @@ def test_pdf_report_marks_unverified():
     with pdfplumber.open(BytesIO(payload)) as pdf:
         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
     assert "未校验" in text
+
+
+def test_pdf_report_renders_llm_calls():
+    report = sample()
+    report["llm"] = {
+        "mode": "online",
+        "calls": [
+            {"index": 0, "chars": 12, "items": 1, "elapsed_ms": 30, "cached": False}
+        ],
+        "truncated": False,
+    }
+    payload = build_pdf_report(report)
+    assert payload.startswith(b"%PDF")
+    with pdfplumber.open(BytesIO(payload)) as pdf:
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    assert "模型调用" in text

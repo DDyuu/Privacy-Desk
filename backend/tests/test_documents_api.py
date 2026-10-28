@@ -223,3 +223,49 @@ def test_docx_export_uses_applied_mapping(unlocked_client, tmp_path):
     reloaded = Document(BytesIO(exported.content))
     assert "13800138000" not in reloaded.paragraphs[1].text
     assert "电话" in reloaded.paragraphs[1].text
+
+
+def test_report_keeps_raw_llm_calls(unlocked_client, monkeypatch):
+    client = unlocked_client
+    ctx = client.app.state.ctx
+    raw = '[{"type":"NAME_CN","text":"张三","confidence":0.9}]'
+
+    def fake_detect(text, high_spans, types):
+        return [], "online", [
+            {
+                "index": 0,
+                "start": 0,
+                "end": len(text),
+                "chars": len(text),
+                "items": 1,
+                "cached": False,
+                "elapsed_ms": 12,
+                "model": "fake-model",
+                "raw": raw,
+                "provider": "online",
+            }
+        ]
+
+    monkeypatch.setattr(ctx.llm_service, "detect", fake_detect)
+
+    upload = client.post(
+        "/api/v1/documents",
+        files={"file": ("raw.txt", "联系人张三，电话13800138000。".encode("utf-8"), "text/plain")},
+    )
+    doc_id = upload.json()["id"]
+    assert client.post(
+        f"/api/v1/documents/{doc_id}/detect", json={"use_llm": True}
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/documents/{doc_id}/mask", json={"actions": {}, "verify": True}
+    ).status_code == 200
+
+    exported = client.get(
+        f"/api/v1/documents/{doc_id}/export",
+        params={"kind": "report", "fmt": "json", "password": "password123"},
+    )
+    assert exported.status_code == 200
+    payload = exported.json()
+    assert payload["llm"]["mode"] == "online"
+    assert payload["llm"]["calls"][0]["raw"] == raw
+    assert payload["llm"]["calls"][0]["provider"] == "online"

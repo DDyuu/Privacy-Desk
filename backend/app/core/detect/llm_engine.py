@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import re
+import time
 
 from app.core.detect.chunking import chunk_text
 from app.core.detect.pre_redact import pre_redact
@@ -53,7 +54,11 @@ class LLMEngine:
         self._types = types
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
-        self._cache: dict[str, list[dict]] = {}
+        # 缓存同时保留原始响应，命中缓存时报告仍能还原模型返回
+        self._cache: dict[str, dict] = {}
+        # 每次 detect 重置：记录每块调用的模型、耗时与原始返回，供报告留档
+        self.trace: list[dict] = []
+        self.model = client.cache_id()
 
     def _cache_key(self, chunk: str, hints: list[dict]) -> str:
         # 键里带上提示词：类型配置变更后旧缓存自动失效
@@ -61,6 +66,7 @@ class LLMEngine:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def detect(self, text: str, high_spans: list[Span]) -> list[Span]:
+        self.trace = []
         if not self._client.available():
             return []
         # 只把启用且声明了 llm 检测器的类型交给模型，减少无关类别干扰
@@ -98,13 +104,49 @@ class LLMEngine:
             ]
             redacted = pre_redact(chunk, local_high)
             key = self._cache_key(redacted, hints)
-            if key in self._cache:
-                items = self._cache[key]
+            started_at = time.perf_counter()
+            cached = key in self._cache
+            if cached:
+                entry = self._cache[key]
+                items = entry["items"]
+                raw = entry["raw"]
             else:
-                items = self._client.extract(redacted, hints)
+                try:
+                    items = self._client.extract(redacted, hints)
+                except Exception as exc:
+                    # 失败也留一条记录：报告里能看出是哪一块、哪个模型出错
+                    self.trace.append(
+                        {
+                            "index": len(self.trace),
+                            "start": start,
+                            "end": end,
+                            "chars": len(chunk),
+                            "items": 0,
+                            "cached": False,
+                            "elapsed_ms": int((time.perf_counter() - started_at) * 1000),
+                            "model": self.model,
+                            "raw": getattr(self._client, "last_raw", "") or "",
+                            "error": f"{type(exc).__name__}: {exc}"[:300],
+                        }
+                    )
+                    raise
+                raw = getattr(self._client, "last_raw", "") or ""
                 # 简单封顶即可，避免长期运行后缓存无限增长
                 if len(self._cache) < 128:
-                    self._cache[key] = items
+                    self._cache[key] = {"items": items, "raw": raw}
+            self.trace.append(
+                {
+                    "index": len(self.trace),
+                    "start": start,
+                    "end": end,
+                    "chars": len(chunk),
+                    "items": len(items),
+                    "cached": cached,
+                    "elapsed_ms": int((time.perf_counter() - started_at) * 1000),
+                    "model": self.model,
+                    "raw": raw,
+                }
+            )
             for item in items:
                 code = str(item.get("type") or "")
                 fragment = _trim_field_label(str(item.get("text") or "").strip())

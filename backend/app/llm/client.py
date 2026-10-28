@@ -65,6 +65,8 @@ def parse_json_array(content: str) -> list[dict]:
 
 class BaseLLM:
     name = "base"
+    # 最近一次调用模型返回的原始文本，由各实现写入，供识别报告留档
+    last_raw = ""
 
     def available(self) -> bool:
         return False
@@ -109,6 +111,7 @@ class OpenAICompatLLM(BaseLLM):
         return f"online:{self._model}"
 
     def extract(self, text: str, hints: list[dict]) -> list[dict]:
+        self.last_raw = ""
         hint_lines = "\n".join(
             f"- {item['code']}（{item['name']}）：{item.get('hint', '')}" for item in hints
         )
@@ -137,6 +140,8 @@ class OpenAICompatLLM(BaseLLM):
                 content = response.json()["choices"][0]["message"]["content"]
                 if not isinstance(content, str):
                     raise LLMError("模型返回内容格式非法")
+                # 先留档原始响应再解析，解析失败时报告里也能看到模型到底回了什么
+                self.last_raw = content
                 return parse_json_array(content)
             except LLMError:
                 raise
@@ -224,6 +229,7 @@ class OllamaLLM(BaseLLM):
         return f"ollama:{self._model}"
 
     def extract(self, text: str, hints: list[dict]) -> list[dict]:
+        self.last_raw = ""
         hint_lines = "\n".join(
             f"- {item['code']}（{item['name']}）：{item.get('hint', '')}" for item in hints
         )
@@ -250,6 +256,7 @@ class OllamaLLM(BaseLLM):
                 content = response.json()["message"]["content"]
                 if not isinstance(content, str):
                     raise LLMError("模型返回内容格式非法")
+                self.last_raw = content
                 return parse_json_array(content)
             except LLMError:
                 raise

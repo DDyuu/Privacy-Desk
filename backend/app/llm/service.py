@@ -123,8 +123,8 @@ class LLMService:
 
     def detect(
         self, text: str, high_spans: list[Span], types: list[TypeDefinition]
-    ) -> tuple[list[Span], str]:
-        """按 online→ollama→rules 依次尝试；前一级报错就降级，全部失败则只保留规则结果。"""
+    ) -> tuple[list[Span], str, list[dict]]:
+        """返回 (片段, 实际模式, 调用留档)；沿 online → ollama → rules 逐级降级。"""
         config = self.config()
         attempts: list[tuple[str, object]] = []
         if config.get("mode") == "online" and config.get("api_key"):
@@ -150,10 +150,16 @@ class LLMService:
                 )
             )
         if not attempts:
-            return [], "rules"
+            return [], "rules", []
+        trace: list[dict] = []
         for name, client in attempts:
+            engine = self._engine(client, types)
             try:
-                return self._engine(client, types).detect(text, high_spans), name
+                spans = engine.detect(text, high_spans)
+                # 每一块的成功调用都带上来源客户端名，便于报告区分在线与本地
+                return spans, name, [{**call, "provider": name} for call in engine.trace]
             except LLMError:
+                # 失败尝试的调用记录也保留，报告里能看到降级原因
+                trace.extend({**call, "provider": name} for call in engine.trace)
                 continue
-        return [], "rules"
+        return [], "rules", trace

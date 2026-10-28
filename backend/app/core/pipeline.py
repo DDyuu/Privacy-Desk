@@ -29,6 +29,40 @@ ALLOWED_EXTS = {
     "txt", "md", "log", "py", "java", "js", "ts", "json", "csv", "eml", "docx", "pdf", "doc",
 }
 
+# 报告要留档模型原始返回，但长文档可能上百次调用，这里限制单块、整篇与调用条数
+MAX_RAW_PER_CALL = 20000
+MAX_RAW_TOTAL = 500000
+MAX_LLM_CALLS = 200
+
+
+def _trim_llm_trace(mode: str, calls: list[dict]) -> dict:
+    """裁剪调用留档：超出预算的原始响应截断并标记，避免报告与数据库无限膨胀。"""
+    trimmed: list[dict] = []
+    budget = MAX_RAW_TOTAL
+    truncated = len(calls) > MAX_LLM_CALLS
+    for call in calls[:MAX_LLM_CALLS]:
+        entry = dict(call)
+        raw = str(entry.get("raw") or "")
+        if len(raw) > MAX_RAW_PER_CALL:
+            raw = raw[:MAX_RAW_PER_CALL] + "…（已截断）"
+            truncated = True
+        if len(raw) > max(budget, 0):
+            raw = raw[: max(budget, 0)] + "…（已截断）"
+            truncated = True
+        budget -= len(raw)
+        entry["raw"] = raw
+        trimmed.append(entry)
+    return {"mode": mode, "calls": trimmed, "truncated": truncated}
+
+
+def _load_llm_trace(ctx: "AppContext", doc_id: str) -> dict:
+    """读取识别阶段保存的模型调用留档；没有大模型参与时返回空字典。"""
+    try:
+        payload = json.loads(ctx.repo.get_text(doc_id, "llm_raw"))
+    except (KeyError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
 
 def convert_doc_to_docx(source: Path, workdir: Path) -> Path:
     """借用无头 LibreOffice 把旧版 .doc 转成 docx，之后统一走 docx 解析。"""
@@ -100,13 +134,19 @@ def detect_document(ctx: "AppContext", doc_id: str, use_llm: bool = True) -> dic
     rule_spans = RuleEngine(types).detect(text)
     llm_spans: list[Span] = []
     mode = "rules"
+    llm_trace: list[dict] = []
     if use_llm:
-        llm_spans, mode = ctx.llm_service.detect(text, rule_spans, types)
+        llm_spans, mode, llm_trace = ctx.llm_service.detect(text, rule_spans, types)
     spans = fuse(rule_spans, llm_spans, types)
     # 识别结果挂在原文版本上，避免后续脱敏版本覆盖后检测记录错位
     version_id = ctx.repo.latest_version_id(doc_id, "original")
     ctx.repo.save_detections(doc_id, version_id, spans)
     ctx.repo.save_version(doc_id, "mode", mode)
+    # 留档每块模型的原始返回（含降级失败记录），供报告导出与排障
+    if llm_trace:
+        ctx.repo.save_version(
+            doc_id, "llm_raw", json.dumps(_trim_llm_trace(mode, llm_trace), ensure_ascii=False)
+        )
     ctx.repo.update_status(doc_id, "detected")
     ctx.repo.audit("document.detect", {"doc_id": doc_id, "count": len(spans), "mode": mode})
     return {"spans": spans, "mode": mode, "text_length": len(text)}
@@ -180,6 +220,7 @@ def mask_document(
         result.applied,
         verify_result,
         stats,
+        llm=_load_llm_trace(ctx, doc_id),
     )
     ctx.repo.save_report(
         doc_id, job_id, "json", json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")

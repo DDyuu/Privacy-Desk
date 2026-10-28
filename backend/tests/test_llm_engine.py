@@ -1,3 +1,5 @@
+import pytest
+
 from pathlib import Path
 
 from app.core.detect.llm_engine import LLMEngine
@@ -51,6 +53,42 @@ def test_llm_engine_pre_redacts_spans_crossing_chunk_boundary():
 def test_llm_engine_returns_empty_when_unavailable():
     engine = LLMEngine(BaseLLM(), load_builtin_types(RESOURCES))
     assert engine.detect("张三", []) == []
+    assert engine.trace == []
+
+
+def test_llm_engine_traces_raw_response_and_model():
+    class RawLLM(BaseLLM):
+        def available(self):
+            return True
+
+        def cache_id(self):
+            return "fake:raw"
+
+        def extract(self, text, hints):
+            self.last_raw = '[{"type":"NAME_CN","text":"张三","confidence":0.9}]'
+            return [{"type": "NAME_CN", "text": "张三", "confidence": 0.9}]
+
+    engine = LLMEngine(RawLLM(), load_builtin_types(RESOURCES))
+    engine.detect("张三", [])
+    call = engine.trace[0]
+    assert call["raw"].startswith("[")
+    assert call["model"] == "fake:raw"
+    assert call["cached"] is False
+    assert call["items"] == 1
+
+
+def test_llm_engine_traces_failed_call():
+    class FailingLLM(BaseLLM):
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            raise RuntimeError("boom")
+
+    engine = LLMEngine(FailingLLM(), load_builtin_types(RESOURCES))
+    with pytest.raises(RuntimeError):
+        engine.detect("张三", [])
+    assert "boom" in engine.trace[0]["error"]
 
 
 def test_llm_engine_trims_field_labels_from_fragments():

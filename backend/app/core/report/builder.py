@@ -30,6 +30,7 @@ def build_json_report(
     applied: list[dict],
     verify: VerifyResult | None,
     stats: dict,
+    llm: dict | None = None,
 ) -> dict:
     by_type: dict[str, int] = {}
     for span in detections:
@@ -50,6 +51,12 @@ def build_json_report(
         "stats": stats,
         "metrics": verify.metrics if verify else {},
         "issues": verify.issues if verify else [],
+        # 模型调用留档：每块的原始返回、耗时、是否命中缓存，便于复核与排障
+        "llm": {
+            "mode": (llm or {}).get("mode", mode),
+            "calls": (llm or {}).get("calls", []),
+            "truncated": bool((llm or {}).get("truncated", False)),
+        },
         "detections": [span.to_dict() for span in detections],
         "applied": applied,
         "residuals": [span.to_dict() for span in verify.residuals] if verify else [],
@@ -98,6 +105,52 @@ def build_pdf_report(report: dict) -> bytes:
         for issue in report["issues"]:
             story.append(Paragraph(f"· {_escape(issue)}", _STYLE))
         story.append(Spacer(1, 8))
+
+    llm_calls = (report.get("llm") or {}).get("calls") or []
+    if llm_calls:
+        cached = sum(1 for item in llm_calls if item.get("cached"))
+        failed = sum(1 for item in llm_calls if item.get("error"))
+        story.append(Paragraph("模型调用", ParagraphStyle("h3", parent=_STYLE, fontSize=12)))
+        story.append(
+            Paragraph(
+                f"共 {len(llm_calls)} 次（缓存 {cached} 次，失败 {failed} 次）；"
+                "原始返回见 JSON 报告。",
+                _STYLE,
+            )
+        )
+        story.append(Spacer(1, 4))
+        call_rows = [["序号", "字符数", "返回条数", "耗时(ms)", "状态"]]
+        for item in llm_calls[:20]:
+            if item.get("error"):
+                status = "失败"
+            elif item.get("cached"):
+                status = "缓存"
+            else:
+                status = "调用"
+            call_rows.append(
+                [
+                    str(item.get("index", "")),
+                    str(item.get("chars", "")),
+                    str(item.get("items", "")),
+                    str(item.get("elapsed_ms", "")),
+                    status,
+                ]
+            )
+        call_table = Table(call_rows, colWidths=[50, 70, 70, 80, 50])
+        call_table.setStyle(
+            TableStyle(
+                [
+                    ("FONTNAME", (0, 0), (-1, -1), "STSong-Light"),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8EEF7")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#B8C4D6")),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ]
+            )
+        )
+        story.append(call_table)
+        if len(llm_calls) > 20:
+            story.append(Paragraph("（仅列前 20 次，完整记录见 JSON 报告）", _STYLE))
+        story.append(Spacer(1, 10))
 
     story.append(Paragraph("脱敏明细", ParagraphStyle("h2", parent=_STYLE, fontSize=12)))
     detail_rows = [["起始", "结束", "类型", "方式", "替换结果"]]
