@@ -43,7 +43,7 @@ class Settings:
     app_token: str | None = field(default_factory=lambda: os.environ.get("APP_TOKEN"))
     max_upload_mb: int = 20
     max_docs: int = field(default_factory=lambda: _env_int("PRIVACY_DESK_MAX_DOCS", 100))
-    chunk_size: int = 2000
+    chunk_size: int = 1000
     chunk_overlap: int = 100
     llm_base_url: str = field(
         default_factory=lambda: _env("PRIVACY_DESK_LLM_BASE", "https://api.deepseek.com/v1")
@@ -59,9 +59,9 @@ class Settings:
     ollama_model: str = field(
         default_factory=lambda: _env("PRIVACY_DESK_OLLAMA_MODEL", "qwen2.5:7b")
     )
-    # 本地模型冷启动与首 token 可能远超 5 秒，默认给足 120 秒，可用环境变量覆盖
+    # 本地模型冷启动与首 token 可能远超 5 秒，默认给足 300 秒，可用环境变量覆盖
     ollama_timeout: float = field(
-        default_factory=lambda: _env_float("PRIVACY_DESK_OLLAMA_TIMEOUT", 120.0)
+        default_factory=lambda: _env_float("PRIVACY_DESK_OLLAMA_TIMEOUT", 300.0)
     )
     # 以下三个加固开关默认关闭，正式分发时由启动脚本/构建流程显式打开
     enforce_integrity: bool = field(

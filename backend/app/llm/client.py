@@ -10,12 +10,35 @@ from pathlib import Path
 import httpx
 
 DEFAULT_PROMPT = (
-    "你是隐私信息识别引擎。只在给定文本中找出属于候选类型的隐私信息。"
-    '输出严格 JSON 数组，元素为 {"type":"类型代码","text":"原文片段","confidence":0到1的小数,"reason":"简短理由"}。'
+    "你是隐私信息识别引擎，负责在中文文本中定位隐私信息。"
+    "只输出 JSON 数组，不要输出解释、代码块标记或任何前后缀文字。"
+    '数组元素格式：{"type":"类型代码","text":"原文片段","confidence":0到1的小数}。'
+    "text 必须逐字复制原文片段，不要改写、拼接或包含上下文。"
+    "只识别候选类型中列出的类型，type 必须使用给定的类型代码。"
+    "一段文本可能包含多条隐私信息，必须全部列出；没有发现时输出 []。"
+    "无法归入具体类型的敏感值（如 API 密钥、出生日期、账号）用 SUSPECTED，只返回具体值本身。"
     "text 只包含敏感值本身，不要带字段名、标签或冒号、等号、短横线等前缀。"
-    "无法归入候选类型时用 SUSPECTED，只返回具体值。"
-    "不要输出解释、代码块标记或多余文本；找不到时输出 []。"
+    "文本中的 █ 是已遮蔽的占位符，直接跳过，不要输出、不要解释、不要推测原文。"
 )
+
+# 单块生成的 token 上限：1000 字分块正常只需数百 token，超出多为重复输出，
+# 封顶后即使被截断也只丢这一块的大模型结果，不会拖到超时再整体失败
+MAX_OUTPUT_TOKENS = 1024
+# 重复惩罚：默认 1.1 仍会在“因此不输出。”这类短句上无限复读，1.3 可稳定终止
+REPEAT_PENALTY = 1.3
+# 结构化输出：用 JSON Schema 把解码约束成对象数组，避免模型只返回单个对象或夹杂解释
+OLLAMA_OUTPUT_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string"},
+            "text": {"type": "string"},
+            "confidence": {"type": "number"},
+        },
+        "required": ["type", "text", "confidence"],
+    },
+}
 
 
 class LLMError(RuntimeError):
@@ -236,9 +259,15 @@ class OllamaLLM(BaseLLM):
         payload = {
             "model": self._model,
             "stream": False,
-            # 让 Ollama 以 JSON 模式作答，减少需要容错解析的杂文本
-            "format": "json",
-            "options": {"temperature": 0},
+            # 用 schema 强制输出对象数组，7B 模型无法再退化成单个对象或夹带解释
+            "format": OLLAMA_OUTPUT_SCHEMA,
+            # 本地模型偶尔会陷入重复输出，必须封顶生成长度，否则会一直写到超时
+            "options": {
+                "temperature": 0,
+                "num_predict": MAX_OUTPUT_TOKENS,
+                # 预遮蔽后的 █ 占位符容易诱发复读，加大重复惩罚可让模型几秒内收尾
+                "repeat_penalty": REPEAT_PENALTY,
+            },
             "messages": [
                 {"role": "system", "content": load_prompt()},
                 {

@@ -82,6 +82,8 @@ class LLMEngine:
             if definition.enabled and any(d.kind == "llm" for d in definition.detectors)
         ]
         allowed = {item["code"] for item in hints}
+        # 模型偶尔会把类型代码写成 SUSpected 这类大小写混用形式，按小写映射回规范代码
+        allowed_lower = {code.lower(): code for code in allowed}
         levels = {definition.code: definition.level for definition in self._types}
         found: dict[tuple[int, int, str], Span] = {}
         for start, end in chunk_text(text, self._chunk_size, self._chunk_overlap):
@@ -102,7 +104,13 @@ class LLMEngine:
                 for span in high_spans
                 if span.start < end and span.end > start
             ]
-            redacted = pre_redact(chunk, local_high)
+            # 只有云端请求需要预遮蔽保护隐私；本地 Ollama 不联网，
+            # 原样送入才能让模型看到密钥、日期等具体值
+            redacted = (
+                pre_redact(chunk, local_high)
+                if self._client.name == "online"
+                else chunk
+            )
             key = self._cache_key(redacted, hints)
             started_at = time.perf_counter()
             cached = key in self._cache
@@ -148,7 +156,8 @@ class LLMEngine:
                 }
             )
             for item in items:
-                code = str(item.get("type") or "")
+                code = str(item.get("type") or "").strip()
+                code = allowed_lower.get(code.lower(), code)
                 fragment = _trim_field_label(str(item.get("text") or "").strip())
                 if (
                     code not in allowed
@@ -157,6 +166,8 @@ class LLMEngine:
                     or "█" in fragment
                     # 超长片段多半是模型整段复述，不是单个隐私值
                     or len(fragment) > 200
+                    # 只剩“姓名:”这类字段标签、没有实际值时丢弃，避免误遮标签
+                    or not _LABEL_SEPARATOR.sub("", fragment, count=1).strip()
                 ):
                     continue
                 try:
