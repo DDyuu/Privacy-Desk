@@ -24,6 +24,9 @@ DEFAULT_PROMPT = (
 # 单块生成的 token 上限：1000 字分块正常只需数百 token，超出多为重复输出，
 # 封顶后即使被截断也只丢这一块的大模型结果，不会拖到超时再整体失败
 MAX_OUTPUT_TOKENS = 1024
+# 在线模型输出上限：推理型模型会先消耗大量 reasoning_content，
+# 留 8192 保证思考结束后仍有额度输出最终 JSON
+MAX_ONLINE_TOKENS = 8192
 # 重复惩罚：默认 1.1 仍会在“因此不输出。”这类短句上无限复读，1.3 可稳定终止
 REPEAT_PENALTY = 1.3
 # 结构化输出：用 JSON Schema 把解码约束成对象数组，避免模型只返回单个对象或夹杂解释
@@ -118,14 +121,16 @@ class OpenAICompatLLM(BaseLLM):
         base_url: str,
         api_key: str,
         model: str,
-        timeout: float = 30.0,
+        timeout: float = 60.0,
         client: httpx.Client | None = None,
     ) -> None:
         # 允许传入 base_url 以适配任何 OpenAI 兼容服务，统一补上 chat/completions 路径
         self._url = base_url.rstrip("/") + "/chat/completions"
         self._api_key = api_key
         self._model = model
-        self._client = client or httpx.Client(timeout=timeout)
+        # 流式读取下 read timeout 只约束“两次数据之间的间隔”，
+        # 60 秒足以覆盖首 token 较慢的推理型模型，也不再是整段生成的硬上限
+        self._client = client or httpx.Client(timeout=httpx.Timeout(timeout, connect=10.0))
 
     def available(self) -> bool:
         return bool(self._api_key)
@@ -133,14 +138,17 @@ class OpenAICompatLLM(BaseLLM):
     def cache_id(self) -> str:
         return f"online:{self._model}"
 
-    def extract(self, text: str, hints: list[dict]) -> list[dict]:
-        self.last_raw = ""
+    def _payload(self, text: str, hints: list[dict]) -> dict:
         hint_lines = "\n".join(
             f"- {item['code']}（{item['name']}）：{item.get('hint', '')}" for item in hints
         )
-        payload = {
+        return {
             "model": self._model,
             "temperature": 0,
+            # 流式返回：首 token 就能到达，避免“整段生成完才返回”撞上读超时
+            "stream": True,
+            # 不封顶时模型可能输出解释或复读，长文分块下会把等待时间无限拉长
+            "max_tokens": MAX_ONLINE_TOKENS,
             "messages": [
                 {"role": "system", "content": load_prompt()},
                 {
@@ -149,28 +157,95 @@ class OpenAICompatLLM(BaseLLM):
                 },
             ],
         }
+
+    def _finish(self, content: str, raw_text: str = "") -> list[dict]:
+        if not isinstance(content, str):
+            raise LLMError("模型返回内容格式非法")
+        if content.strip():
+            # 先留档原始响应再解析，解析失败时报告里也能看到模型到底回了什么
+            self.last_raw = content
+            return parse_json_array(content)
+        # 少数服务会忽略 stream，把完整 JSON 当成普通响应塞进 event-stream
+        try:
+            message = json.loads(raw_text)["choices"][0]["message"]["content"]
+            if isinstance(message, str) and message.strip():
+                self.last_raw = message
+                return parse_json_array(message)
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+            pass
+        # 空内容通常是模型只输出了推理过程，或服务端直接断流；
+        # 把原始流截断留档，报告里才能看出到底收到了什么
+        self.last_raw = raw_text[:2000]
+        if "reasoning_content" in raw_text:
+            raise LLMError("在线模型只返回推理内容，疑似推理模型；请改用非推理模型或调大输出上限")
+        raise LLMError("在线模型返回空内容")
+
+    def _extract_once(self, payload: dict) -> list[dict]:
+        parts: list[str] = []
+        raw_events: list[str] = []
+        with self._client.stream(
+            "POST",
+            self._url,
+            headers={"Authorization": f"Bearer {self._api_key}"},
+            json=payload,
+        ) as response:
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            if "text/event-stream" not in content_type:
+                # 少数兼容服务会忽略 stream=True，直接回完整 JSON，这里兼容处理
+                body = response.read().decode("utf-8", errors="replace")
+                try:
+                    content = json.loads(body)["choices"][0]["message"]["content"]
+                except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+                    self.last_raw = body[:2000]
+                    raise LLMError("模型返回内容格式非法") from exc
+                return self._finish(content, body)
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                if not line.startswith("data:"):
+                    # 非标准实现可能把完整 JSON 当成一行塞进 event-stream
+                    raw_events.append(line)
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                raw_events.append(data)
+                try:
+                    event = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                choices = event.get("choices") or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                piece = (choice.get("delta") or {}).get("content")
+                if not isinstance(piece, str):
+                    # 部分实现流式结束时只给一条 message，而不是 delta
+                    piece = (choice.get("message") or {}).get("content")
+                if isinstance(piece, str):
+                    parts.append(piece)
+        return self._finish("".join(parts), "\n".join(raw_events))
+
+    def extract(self, text: str, hints: list[dict]) -> list[dict]:
+        self.last_raw = ""
+        payload = self._payload(text, hints)
         last_error = None
-        # 最多 3 次尝试，间隔 0.3/0.6/0.9 秒；只重试网络与响应类异常，
-        # 内容格式非法（LLMError）重试也不会变好，直接上抛。
+        # 只重试连接类错误；超时与 HTTP 状态错误重试不会变好，反而成倍放大等待
         for attempt in range(3):
             try:
-                response = self._client.post(
-                    self._url,
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                    json=payload,
-                )
-                response.raise_for_status()
-                content = response.json()["choices"][0]["message"]["content"]
-                if not isinstance(content, str):
-                    raise LLMError("模型返回内容格式非法")
-                # 先留档原始响应再解析，解析失败时报告里也能看到模型到底回了什么
-                self.last_raw = content
-                return parse_json_array(content)
-            except LLMError:
-                raise
-            except Exception as exc:
+                return self._extract_once(payload)
+            except httpx.TimeoutException as exc:
+                raise LLMError(f"在线模型调用超时：{exc}") from exc
+            except httpx.TransportError as exc:
                 last_error = exc
                 time.sleep(0.3 * (attempt + 1))
+            except LLMError:
+                raise
+            except httpx.HTTPStatusError as exc:
+                raise LLMError(f"在线模型调用失败：{exc}") from exc
+            except Exception as exc:
+                raise LLMError(f"在线模型调用失败：{exc}") from exc
         raise LLMError(f"在线模型调用失败：{last_error}") from last_error
 
 

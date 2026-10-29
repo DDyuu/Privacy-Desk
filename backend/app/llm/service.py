@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import time
+
 from app.config import Settings
 from app.core.detect.llm_engine import LLMEngine
 from app.core.detect.rule_engine import Span
 from app.core.detect.types import TypeDefinition
 from app.core.store.repository import Repository
-from app.llm.client import LLMError, NullLLM, OllamaLLM, OpenAICompatLLM
+from app.llm.client import LLMError, NullLLM, OllamaLLM, OpenAICompatLLM, probe_ollama
 from app.llm.env_keys import detect_env_keys, normalize_names
 
 
@@ -15,6 +17,8 @@ class LLMService:
     def __init__(self, repo: Repository, settings: Settings) -> None:
         self._repo = repo
         self._settings = settings
+        # Ollama 可达性缓存：url -> (检测时间, 是否可连)，避免每次识别都等连接超时
+        self._ollama_probe: dict[str, tuple[float, bool]] = {}
 
     def _stored(self) -> dict:
         # 配置读取失败按“未配置”处理，避免数据库异常直接拖垮会话状态等基础接口
@@ -125,6 +129,19 @@ class LLMService:
             chunk_overlap=self._settings.chunk_overlap,
         )
 
+    def _ollama_reachable(self, url: str) -> bool:
+        """探测 Ollama 是否可连，结果缓存 30 秒；服务没启动时直接跳过兜底。"""
+        url = (url or "").strip()
+        if not url:
+            return False
+        now = time.monotonic()
+        cached = self._ollama_probe.get(url)
+        if cached is not None and now - cached[0] < 30:
+            return cached[1]
+        reachable = bool(probe_ollama(url, timeout=2.0).get("reachable"))
+        self._ollama_probe[url] = (now, reachable)
+        return reachable
+
     def detect(
         self, text: str, high_spans: list[Span], types: list[TypeDefinition]
     ) -> tuple[list[Span], str, list[dict]]:
@@ -140,8 +157,10 @@ class LLMService:
                     ),
                 )
             )
-        # 在线模式也把 ollama 作为兜底加入；纯 ollama 模式则只有它自己
-        if config.get("mode") == "ollama" or attempts:
+        # 在线模式也把 ollama 作为兜底加入；纯 ollama 模式则只有它自己。
+        # 先探测再尝试：服务没启动时直接跳过，避免连接重试白等数秒。
+        ollama_url = config.get("ollama_url", "")
+        if (config.get("mode") == "ollama" or attempts) and self._ollama_reachable(ollama_url):
             attempts.append(
                 (
                     "ollama",
