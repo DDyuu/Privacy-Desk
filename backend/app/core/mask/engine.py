@@ -6,7 +6,13 @@ from dataclasses import dataclass
 
 from app.core.detect.rule_engine import Span
 from app.core.detect.types import TypeRegistry
-from app.core.mask.operators import encrypt_value, fuzz_value, mask_value
+from app.core.mask.operators import (
+    encrypt_value,
+    fuzz_value,
+    is_chinese_name,
+    mask_value,
+    name_surname,
+)
 
 VALID_ACTIONS = {"mask", "replace", "fuzz", "encrypt"}
 
@@ -66,6 +72,8 @@ class MaskEngine:
             if not (0 <= span.start <= span.end <= len(text)) or text[span.start:span.end] != span.text:
                 raise ValueError("识别结果与原文不一致，无法脱敏")
         counters: dict[str, int] = {}
+        # 姓名按姓氏独立编号：张某1、张某2、李某1，同姓名复用同一编号
+        surname_counters: dict[str, int] = {}
         mapping: dict[tuple[str, str], str] = {}
         replacements: list[tuple[Span, str, str]] = []
         for span in ordered:
@@ -76,11 +84,23 @@ class MaskEngine:
                 key = (span.type_code, span.text)
                 # 同类型同值共用同一编号，保持文档内指代一致（便于人工比对）
                 if key not in mapping:
-                    # 计数器按类型独立，[手机号_1] 与 [姓名_1] 互不影响
-                    count = counters.get(span.type_code, 0) + 1
-                    counters[span.type_code] = count
-                    label = self._registry.get(span.type_code).name
-                    mapping[key] = f"[{label}_{count}]"
+                    surname = name_surname(span.text)
+                    # 中文姓名改为“姓+某+序号”，保留可读性；复姓保留两个字
+                    if (
+                        span.type_code == "NAME_CN"
+                        and is_chinese_name(span.text)
+                        and len(span.text) > len(surname)
+                    ):
+                        count = surname_counters.get(surname, 0)
+                        # 首个同姓姓名不加序号（张某），第二个起标注 2、3，避免满屏“张某1”
+                        mapping[key] = f"{surname}某" if count == 0 else f"{surname}某{count + 1}"
+                        surname_counters[surname] = count + 1
+                    else:
+                        # 其他类型（含非中文姓名）仍用 [类型_序号] 占位符
+                        count = counters.get(span.type_code, 0) + 1
+                        counters[span.type_code] = count
+                        label = self._registry.get(span.type_code).name
+                        mapping[key] = f"[{label}_{count}]"
                 replacement = mapping[key]
             elif action == "fuzz":
                 replacement = fuzz_value(span.text, span.type_code)

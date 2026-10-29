@@ -33,6 +33,10 @@ type Stage = "detection" | "mask" | "compare";
 // 忽略项用「起止偏移-类型编码」作为键：同一文档内位置+类型唯一，重新识别后仍能对上
 const spanKey = (span: Span) => `${span.start}-${span.end}-${span.type_code}`;
 
+// 在线模型建议保留（ignore）的片段，识别完成后默认勾选为忽略，用户仍可取消
+const suggestedIgnoreKeys = (items: Span[]) =>
+  items.filter((span) => span.suggest === "ignore").map(spanKey);
+
 const STAGE_INDEX: Record<Stage, number> = { detection: 0, mask: 1, compare: 2 };
 const STAGE_ORDER: Stage[] = ["detection", "mask", "compare"];
 const STAGE_TITLE: Record<Stage, string> = {
@@ -145,7 +149,7 @@ export default function WorkbenchPage({
       void loadDocuments();
       if (selectedIdRef.current !== docId) return true;
       setSpans(result.spans);
-      setIgnoredKeys([]);
+      setIgnoredKeys(suggestedIgnoreKeys(result.spans));
       setMode(result.mode);
       clearMask();
       setStage("detection");
@@ -217,6 +221,7 @@ export default function WorkbenchPage({
         if (cancelled) return;
         setDetail(doc);
         setSpans(doc.detections);
+        setIgnoredKeys(suggestedIgnoreKeys(doc.detections));
         if (doc.status === "masked" || doc.status === "verified") {
           // 已脱敏/已校验的文档直接恢复到对比阶段，无需再次识别
           const restored = await loadComparison(doc.id);

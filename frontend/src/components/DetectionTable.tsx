@@ -12,12 +12,21 @@ import {
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { Level, Span, TypeDefinition } from "../types";
+import type { Action, Level, Span, TypeDefinition } from "../types";
 
 const LEVEL_META: Record<Level, { label: string; color: string }> = {
   high: { label: "高", color: "red" },
   medium: { label: "中", color: "orange" },
   low: { label: "低", color: "blue" },
+};
+
+// 与脱敏配置页的动作选项保持一致的展示文案；ignore 表示建议不脱敏
+const SUGGEST_META: Record<Action | "ignore", string> = {
+  mask: "屏蔽",
+  replace: "替换",
+  fuzz: "模糊化",
+  encrypt: "加密",
+  ignore: "忽略",
 };
 
 // 同一文本可能出现相同内容，靠起止位置与类型组合保证每行唯一；rowKey 与忽略集合共用该值
@@ -114,6 +123,16 @@ export default function DetectionTable({
       ),
     },
     {
+      title: "建议",
+      width: 76,
+      render: (_, span) =>
+        span.suggest ? (
+          <Tag color="cyan">{SUGGEST_META[span.suggest]}</Tag>
+        ) : (
+          <span className="text-muted">—</span>
+        ),
+    },
+    {
       title: "等级",
       dataIndex: "level",
       width: 58,
@@ -159,8 +178,8 @@ export default function DetectionTable({
             columns={columns}
             dataSource={rows}
             pagination={{ pageSize: 8, size: "small", showSizeChanger: false, hideOnSinglePage: true }}
-            // 横向滚动宽度等于各列固定宽度之和（56+104+140+96+70+64+58），列宽调整时需同步
-            scroll={{ x: 588 }}
+            // 横向滚动宽度等于各列固定宽度之和（56+104+140+96+70+64+76+58），列宽调整时需同步
+            scroll={{ x: 664 }}
             locale={{
               emptyText: (
                 <Empty

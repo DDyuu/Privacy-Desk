@@ -20,6 +20,8 @@ class Span:
     level: str = "medium"
     # ignored：用户显式排除的片段，进入报告但不参与脱敏与风险判定
     ignored: bool = False
+    # suggest：在线大模型给出的推荐动作（mask/replace/fuzz/encrypt），本地模式为空
+    suggest: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -31,6 +33,7 @@ class Span:
             "source": self.source,
             "level": self.level,
             "ignored": self.ignored,
+            "suggest": self.suggest,
         }
 
 

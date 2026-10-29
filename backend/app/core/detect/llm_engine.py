@@ -7,6 +7,7 @@ import json
 import math
 import re
 import time
+from dataclasses import replace
 
 from app.core.detect.chunking import chunk_text
 from app.core.detect.pre_redact import pre_redact
@@ -20,6 +21,8 @@ MIN_FRAGMENT_LEN = 2
 MAX_HITS_PER_FRAGMENT = 20
 # 单篇文档的结果上限，防止超长文本拖垮后续融合与脱敏
 MAX_SPANS = 500
+# 在线模型可推荐的脱敏动作；ignore 表示建议保留不脱敏，非法值一律退回类型默认动作
+SUGGEST_ACTIONS = {"mask", "replace", "fuzz", "encrypt", "ignore"}
 
 _LABEL_SEPARATOR = re.compile(r"^[\u4e00-\u9fa5]{2,8}\s*[:：=＝\-—]\s*")
 _LABEL_BEFORE_ASCII = re.compile(r"^[\u4e00-\u9fa5]{2,8}(?=[A-Za-z0-9])")
@@ -158,6 +161,19 @@ class LLMEngine:
             for item in items:
                 code = str(item.get("type") or "").strip()
                 code = allowed_lower.get(code.lower(), code)
+                # 在线模式允许把候选清单之外的可疑项归入 SUSPECTED，避免新类型直接漏掉
+                if (
+                    code not in allowed
+                    and self._client.name == "online"
+                    and "SUSPECTED" in allowed
+                ):
+                    code = "SUSPECTED"
+                suggest = str(item.get("suggest") or "").strip().lower()
+                if suggest not in SUGGEST_ACTIONS:
+                    suggest = ""
+                # 安全兜底：高敏类型不允许被建议忽略，模型越权时直接丢弃该建议
+                if suggest == "ignore" and levels.get(code) == "high":
+                    suggest = ""
                 fragment = _trim_field_label(str(item.get("text") or "").strip())
                 if (
                     code not in allowed
@@ -189,8 +205,13 @@ class LLMEngine:
                         confidence,
                         "llm",
                         levels.get(code, "medium"),
+                        suggest=suggest,
                     )
-                    if key_span not in found or candidate.confidence > found[key_span].confidence:
+                    previous = found.get(key_span)
+                    # 置信度更高的候选会替换旧记录，但不要丢掉旧记录已有的推荐动作
+                    if previous is not None and not candidate.suggest:
+                        candidate = replace(candidate, suggest=previous.suggest)
+                    if previous is None or candidate.confidence > previous.confidence:
                         # 重叠分块会让同一实体在相邻块各命中一次，按 (起,止,类型) 去重并保留高置信度
                         found[key_span] = candidate
                     if len(found) >= MAX_SPANS:

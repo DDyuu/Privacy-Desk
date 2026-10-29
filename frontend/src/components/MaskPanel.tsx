@@ -34,10 +34,13 @@ interface MaskPanelProps {
 }
 
 // 新建配置行时继承类型定义里的默认动作与保留位数，减少手工调整
-function defaultRow(definition: TypeDefinition | undefined): MaskRowState {
+function defaultRow(
+  definition: TypeDefinition | undefined,
+  recommended?: Action,
+): MaskRowState {
   const options = definition?.actionOptions ?? {};
   return {
-    action: definition?.defaultAction ?? "mask",
+    action: recommended ?? definition?.defaultAction ?? "mask",
     keepPrefix: Number(options.keepPrefix ?? 0),
     keepSuffix: Number(options.keepSuffix ?? 0),
   };
@@ -61,6 +64,26 @@ export default function MaskPanel({
   const codesKey = codes.join("|");
   const [rows, setRows] = useState<Record<string, MaskRowState>>({});
 
+  // 在线模型逐条给出的建议动作，按类型汇总：取该类型下出现次数最多的建议作为默认勾选；
+  // ignore 是逐条级别的建议，由识别结果表的勾选控制，不参与类型动作聚合
+  const recommendations = useMemo(() => {
+    const counts: Record<string, Partial<Record<Action, number>>> = {};
+    for (const span of spans) {
+      if (!span.suggest || span.suggest === "ignore") continue;
+      const bucket = counts[span.type_code] ?? {};
+      bucket[span.suggest] = (bucket[span.suggest] ?? 0) + 1;
+      counts[span.type_code] = bucket;
+    }
+    const result: Record<string, Action> = {};
+    for (const [code, bucket] of Object.entries(counts)) {
+      const best = (Object.entries(bucket) as Array<[Action, number]>).sort(
+        (a, b) => b[1] - a[1],
+      )[0];
+      if (best) result[code] = best[0];
+    }
+    return result;
+  }, [spans]);
+
   useEffect(() => {
     setRows((prev) => {
       const next: Record<string, MaskRowState> = {};
@@ -69,7 +92,7 @@ export default function MaskPanel({
         if (prev[code]) {
           next[code] = prev[code];
         } else {
-          next[code] = defaultRow(byCode[code]);
+          next[code] = defaultRow(byCode[code], recommendations[code]);
           changed = true;
         }
       }
@@ -168,20 +191,6 @@ export default function MaskPanel({
         );
       })}
 
-      <Tooltip title={disabled ? "请先执行识别" : undefined}>
-        <span style={{ display: "block" }}>
-          <Button
-            type="primary"
-            block
-            loading={loading}
-            disabled={disabled || loading}
-            onClick={handleMask}
-          >
-            执行脱敏
-          </Button>
-        </span>
-      </Tooltip>
-
       {/* 统计文案由后端返回；忽略数为 0 时省略，避免常态出现“忽略 0 处” */}
       {stats ? (
         <div className="mask-stats">
@@ -214,6 +223,23 @@ export default function MaskPanel({
       ) : null}
 
       {!verify ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未执行脱敏" /> : null}
+
+      {/* 主操作吸底：类型较多时无需滚到列表末尾才能点击 */}
+      <div className="mask-actions">
+        <Tooltip title={disabled ? "请先执行识别" : undefined}>
+          <span style={{ display: "block" }}>
+            <Button
+              type="primary"
+              block
+              loading={loading}
+              disabled={disabled || loading}
+              onClick={handleMask}
+            >
+              执行脱敏
+            </Button>
+          </span>
+        </Tooltip>
+      </div>
     </div>
   );
 }

@@ -14,6 +14,8 @@ export interface Span {
   level: Level;
   /** 用户勾选忽略，不参与脱敏 */
   ignored?: boolean;
+  /** 在线大模型推荐的脱敏动作；ignore 表示建议保留不脱敏，本地模式为空 */
+  suggest?: Action | "ignore";
 }
 
 export interface DocumentMeta {

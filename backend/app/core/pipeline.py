@@ -123,6 +123,7 @@ def _spans_from_rows(rows: list[dict]) -> list[Span]:
             row["confidence"],
             row["source"],
             row["level"],
+            suggest=row.get("suggest", ""),
         )
         for row in rows
     ]

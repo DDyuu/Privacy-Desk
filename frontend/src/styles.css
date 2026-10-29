@@ -464,6 +464,14 @@ mark.hit-low {
   color: var(--muted);
   font-size: 12px;
 }
+/* 主操作吸底，保证类型较多、列表需要滚动时按钮始终可见 */
+.mask-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 10px 0 2px;
+  background: #fff;
+}
 .issue-list {
   margin: 4px 0 0;
   padding-left: 18px;

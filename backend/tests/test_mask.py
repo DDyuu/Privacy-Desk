@@ -45,8 +45,33 @@ def test_engine_uses_consistent_placeholder_for_same_name():
     ]
     engine = MaskEngine(b"k" * 32, registry(), {"NAME_CN": {"action": "replace"}})
     result = engine.apply("张三说，张三走了", spans)
-    assert result.masked_text == "[姓名_1]说，[姓名_1]走了"
+    assert result.masked_text == "张某说，张某走了"
     assert result.mapping_size == 1
+
+
+def test_engine_numbers_names_sharing_a_surname():
+    spans = [
+        Span(0, 2, "NAME_CN", "张三", 0.9, "llm", "medium"),
+        Span(3, 5, "NAME_CN", "张四", 0.9, "llm", "medium"),
+        Span(6, 8, "NAME_CN", "张五", 0.9, "llm", "medium"),
+    ]
+    engine = MaskEngine(b"k" * 32, registry(), {"NAME_CN": {"action": "replace"}})
+    result = engine.apply("张三、张四、张五", spans)
+    assert result.masked_text == "张某、张某2、张某3"
+
+
+def test_engine_keeps_compound_surname():
+    span = Span(0, 4, "NAME_CN", "欧阳娜娜", 0.9, "llm", "medium")
+    engine = MaskEngine(b"k" * 32, registry(), {"NAME_CN": {"action": "replace"}})
+    result = engine.apply("欧阳娜娜来了", [span])
+    assert result.masked_text == "欧阳某来了"
+
+
+def test_engine_falls_back_to_placeholder_for_non_chinese_name():
+    span = Span(0, 4, "NAME_CN", "John", 0.9, "llm", "medium")
+    engine = MaskEngine(b"k" * 32, registry(), {"NAME_CN": {"action": "replace"}})
+    result = engine.apply("John来了", [span])
+    assert result.masked_text == "[姓名_1]来了"
 
 
 def test_engine_applies_default_mask_to_phone():

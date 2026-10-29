@@ -44,6 +44,16 @@ OLLAMA_OUTPUT_SCHEMA = {
 }
 
 
+# 在线模型额外要求逐条给出推荐脱敏动作，本地小模型不做这个要求
+ONLINE_SUGGEST_SUFFIX = (
+    "\n候选类型之外但明显敏感的信息仍用 SUSPECTED，不要遗漏。"
+    "\n为每个结果增加 suggest 字段，取值只能是 mask、replace、fuzz、encrypt、ignore 之一："
+    "密钥、证件、银行卡等高敏信息只能建议 mask 或 encrypt，禁止建议 ignore；"
+    "其余类型在安全前提下优先 replace 或 fuzz，尽量保留可读性；"
+    "低风险且保留不影响安全的信息可以建议 ignore，表示不脱敏。"
+)
+
+
 class LLMError(RuntimeError):
     """大模型调用失败。"""
 
@@ -150,7 +160,7 @@ class OpenAICompatLLM(BaseLLM):
             # 不封顶时模型可能输出解释或复读，长文分块下会把等待时间无限拉长
             "max_tokens": MAX_ONLINE_TOKENS,
             "messages": [
-                {"role": "system", "content": load_prompt()},
+                {"role": "system", "content": load_prompt() + ONLINE_SUGGEST_SUFFIX},
                 {
                     "role": "user",
                     "content": f"候选类型：\n{hint_lines}\n\n待识别文本：\n{text}",

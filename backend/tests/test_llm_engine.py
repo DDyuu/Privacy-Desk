@@ -140,6 +140,71 @@ def test_llm_engine_accepts_suspected_type_for_unknown_fields():
     assert spans[0].text == "2026/10/26"
 
 
+def test_llm_engine_keeps_online_suggestion():
+    class SuggestLLM(BaseLLM):
+        name = "online"
+
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            return [{"type": "NAME_CN", "text": "张三", "confidence": 0.9, "suggest": "replace"}]
+
+    spans = LLMEngine(SuggestLLM(), load_builtin_types(RESOURCES)).detect("张三", [])
+    assert spans[0].suggest == "replace"
+
+
+def test_llm_engine_maps_unknown_type_to_suspected_for_online():
+    class UnknownLLM(BaseLLM):
+        name = "online"
+
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            return [
+                {
+                    "type": "API_KEY",
+                    "text": "sk-abc123456789012345",
+                    "confidence": 0.8,
+                    "suggest": "mask",
+                }
+            ]
+
+    text = "密钥sk-abc123456789012345"
+    spans = LLMEngine(UnknownLLM(), load_builtin_types(RESOURCES)).detect(text, [])
+    assert spans[0].type_code == "SUSPECTED"
+    assert spans[0].suggest == "mask"
+
+
+def test_llm_engine_keeps_ignore_suggestion_for_low_risk():
+    class IgnoreLLM(BaseLLM):
+        name = "online"
+
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            return [{"type": "SUSPECTED", "text": "2026/10/26", "confidence": 0.6, "suggest": "ignore"}]
+
+    spans = LLMEngine(IgnoreLLM(), load_builtin_types(RESOURCES)).detect("出生日期2026/10/26", [])
+    assert spans[0].suggest == "ignore"
+
+
+def test_llm_engine_drops_ignore_suggestion_for_high_level():
+    class IgnoreHighLLM(BaseLLM):
+        name = "online"
+
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            return [{"type": "PHONE_CN", "text": "13800138000", "confidence": 0.9, "suggest": "ignore"}]
+
+    spans = LLMEngine(IgnoreHighLLM(), load_builtin_types(RESOURCES)).detect("13800138000", [])
+    assert spans[0].suggest == ""
+
+
 def test_llm_engine_normalizes_type_code_case():
     class LowerLLM(BaseLLM):
         def available(self):

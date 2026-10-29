@@ -37,6 +37,14 @@ def test_llm_wins_for_address_against_rule():
     assert result[0].source == "llm"
 
 
+def test_rule_span_inherits_llm_suggestion():
+    rule = Span(0, 11, "PHONE_CN", "13800138000", 0.99, "rule", "high")
+    llm = Span(0, 11, "PHONE_CN", "13800138000", 0.80, "llm", "high", suggest="encrypt")
+    result = fuse([rule], [llm], TYPES)
+    assert result[0].source == "rule"
+    assert result[0].suggest == "encrypt"
+
+
 def test_longer_span_wins_inside_same_type():
     short = Span(0, 2, "NAME_CN", "张三", 0.8, "llm", "medium")
     long = Span(0, 4, "NAME_CN", "张三丰丰", 0.8, "llm", "medium")

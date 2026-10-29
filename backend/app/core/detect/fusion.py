@@ -51,4 +51,23 @@ def fuse(rule_spans: list[Span], llm_spans: list[Span], types: list[TypeDefiniti
         ):
             continue
         accepted.append(replace(candidate, level=levels.get(candidate.type_code, candidate.level)))
-    return sorted(accepted, key=lambda item: (item.start, item.end, item.type_code))
+
+    # 规则胜出时，把同位置同类型的大模型推荐动作带回来，供脱敏配置页预选
+    merged: list[Span] = []
+    for span in accepted:
+        if not span.suggest:
+            donor = next(
+                (
+                    item
+                    for item in llm_spans
+                    if item.suggest
+                    and item.type_code == span.type_code
+                    and item.start < span.end
+                    and span.start < item.end
+                ),
+                None,
+            )
+            if donor is not None:
+                span = replace(span, suggest=donor.suggest)
+        merged.append(span)
+    return sorted(merged, key=lambda item: (item.start, item.end, item.type_code))
