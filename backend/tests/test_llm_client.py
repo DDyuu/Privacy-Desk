@@ -35,7 +35,9 @@ def test_openai_client_sends_zero_temperature_and_parses():
 def test_ollama_client_uses_json_format():
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
-        assert payload["format"] == "json"
+        assert payload["format"]["type"] == "array"
+        assert payload["options"]["num_predict"] > 0
+        assert payload["options"]["repeat_penalty"] >= 1.3
         return httpx.Response(
             200,
             json={"message": {"content": '[{"type":"NAME_CN","text":"李四","confidence":0.8}]'}},

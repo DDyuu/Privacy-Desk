@@ -140,6 +140,18 @@ def test_llm_engine_accepts_suspected_type_for_unknown_fields():
     assert spans[0].text == "2026/10/26"
 
 
+def test_llm_engine_normalizes_type_code_case():
+    class LowerLLM(BaseLLM):
+        def available(self):
+            return True
+
+        def extract(self, text, hints):
+            return [{"type": "SusPected", "text": "2026/10/26", "confidence": 0.8}]
+
+    spans = LLMEngine(LowerLLM(), load_builtin_types(RESOURCES)).detect("出生日期2026/10/26", [])
+    assert spans[0].type_code == "SUSPECTED"
+
+
 def test_llm_engine_skips_whitespace_and_single_char_fragments():
     class BadLLM(BaseLLM):
         def available(self):
