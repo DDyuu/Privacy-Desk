@@ -17,9 +17,9 @@
 
 ## 二、安装与首次使用
 
-**下载安装包**：[隐盾 PrivacyDesk 0.2.1（Windows x64）](https://github.com/DDyuu/Privacy-Desk/releases/download/v0.2.1/PrivacyDesk.Setup.0.2.1.exe) ｜ [历史版本与更新说明](https://github.com/DDyuu/Privacy-Desk/releases)
+**下载安装包**：[隐盾 PrivacyDesk 0.3.0（Windows x64）](https://github.com/DDyuu/Privacy-Desk/releases/download/v0.3.0/PrivacyDesk.Setup.0.3.0.exe) ｜ [历史版本与更新说明](https://github.com/DDyuu/Privacy-Desk/releases)
 
-> GitHub 会清理资源名中的中文字符，下载后的文件名形如 `PrivacyDesk.Setup.0.2.1.exe`；安装完成后的程序名仍为「隐盾 PrivacyDesk」。
+> GitHub 会清理资源名中的中文字符，下载后的文件名形如 `PrivacyDesk.Setup.0.3.0.exe`；安装完成后的程序名仍为「隐盾 PrivacyDesk」。
 
 1. 双击安装包 `隐盾 PrivacyDesk Setup x.y.z.exe`，按向导选择安装目录（支持自定义路径），完成后桌面会生成快捷方式。
 2. 首次启动会进入“设置主密码”页面：密码至少 8 位，需要输入两次确认。

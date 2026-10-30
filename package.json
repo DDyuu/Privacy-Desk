@@ -1,6 +1,6 @@
 {
   "name": "privacy-desk",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "隐盾 PrivacyDesk 桌面端（Electron 外壳 + FastAPI sidecar）",
   "author": "PrivacyDesk",

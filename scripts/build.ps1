@@ -68,7 +68,8 @@ Pop-Location
 
 Write-Host "[5/10] PyInstaller 打包后端" -ForegroundColor Cyan
 Push-Location $Backend
-& $PyInstaller "build\pyinstaller.spec" --noconfirm
+# 部分环境下 Scripts\pyinstaller.exe 启动器会静默失败，改用模块方式调用更稳定
+& $Python -m PyInstaller "build\pyinstaller.spec" --noconfirm
 Assert-Exit "PyInstaller 打包"
 Pop-Location
 
@@ -105,7 +106,8 @@ Pop-Location
 
 Write-Host "[9/10] electron-builder 生成 Windows 安装包" -ForegroundColor Cyan
 Push-Location $Root
-& $Npx electron-builder --win --x64 --config.win.signAndEditExecutable=false
+# --publish never：CI 环境下 electron-builder 会尝试自动发布，这里只做本地构建
+& $Npx electron-builder --win --x64 --config.win.signAndEditExecutable=false --publish never
 Assert-Exit "electron-builder"
 Pop-Location
 
