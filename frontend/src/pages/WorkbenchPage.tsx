@@ -249,6 +249,10 @@ export default function WorkbenchPage({
     [spans],
   );
   const llmCount = spans.length - ruleCount;
+  const suggestIgnoreCount = useMemo(
+    () => spans.filter((span) => span.suggest === "ignore").length,
+    [spans],
+  );
   const ignoredSet = useMemo(() => new Set(ignoredKeys), [ignoredKeys]);
   const activeSpans = useMemo(
     () => spans.filter((span) => !ignoredSet.has(spanKey(span))),
@@ -371,6 +375,9 @@ export default function WorkbenchPage({
           <span>识别总数 {spans.length}</span>
           <span>规则 {ruleCount}</span>
           <span>LLM {llmCount}</span>
+          <Tooltip title="大模型建议忽略（不脱敏）的片段数量">
+            <span>建议忽略 {suggestIgnoreCount}</span>
+          </Tooltip>
           <span>当前模式 {MODE_META[currentMode].label}</span>
         </div>
       </Card>
