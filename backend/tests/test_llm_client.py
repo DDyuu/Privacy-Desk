@@ -43,6 +43,8 @@ def test_openai_client_streams_sse_and_caps_output():
         payload = json.loads(request.content)
         assert payload["stream"] is True
         assert payload["max_tokens"] > 0
+        # 抽取任务关闭推理，避免推理模型把额度消耗在 reasoning_content 上
+        assert payload["reasoning_effort"] == "none"
         return httpx.Response(
             200, text=body, headers={"content-type": "text/event-stream"}
         )
@@ -88,6 +90,24 @@ def test_openai_empty_content_keeps_raw_stream_for_diagnosis():
         llm.extract("张三", [])
     assert "reasoning_content" in llm.last_raw
     assert "推理模型" in str(excinfo.value)
+
+
+def test_openai_drops_reasoning_effort_when_service_rejects_it():
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        seen.append(payload)
+        if "reasoning_effort" in payload:
+            return httpx.Response(400, json={"error": "unknown parameter"})
+        body = 'data: {"choices":[{"delta":{"content":"[]"}}]}\n\ndata: [DONE]\n\n'
+        return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    llm = OpenAICompatLLM("https://api.test/v1", "sk-test", "test-model", client=client)
+    assert llm.extract("张三", []) == []
+    assert "reasoning_effort" in seen[0]
+    assert "reasoning_effort" not in seen[1]
 
 
 def test_openai_timeout_is_not_retried():

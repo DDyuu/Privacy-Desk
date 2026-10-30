@@ -155,6 +155,9 @@ class OpenAICompatLLM(BaseLLM):
         return {
             "model": self._model,
             "temperature": 0,
+            # 抽取任务不需要思考链；DeepSeek 等推理模型默认会先输出 reasoning_content，
+            # 加 none 让它直接给出最终 JSON（实测 reasoning 长度降为 0）
+            "reasoning_effort": "none",
             # 流式返回：首 token 就能到达，避免“整段生成完才返回”撞上读超时
             "stream": True,
             # 不封顶时模型可能输出解释或复读，长文分块下会把等待时间无限拉长
@@ -253,6 +256,15 @@ class OpenAICompatLLM(BaseLLM):
             except LLMError:
                 raise
             except httpx.HTTPStatusError as exc:
+                # 部分兼容服务不认识 reasoning_effort，会直接 400；
+                # 去掉该参数再试一次，保证换用其他服务时不至于整条链路失败
+                if (
+                    "reasoning_effort" in payload
+                    and exc.response is not None
+                    and exc.response.status_code == 400
+                ):
+                    payload.pop("reasoning_effort")
+                    continue
                 raise LLMError(f"在线模型调用失败：{exc}") from exc
             except Exception as exc:
                 raise LLMError(f"在线模型调用失败：{exc}") from exc
