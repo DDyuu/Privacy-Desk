@@ -422,7 +422,7 @@ export default function WorkbenchPage({
 
           {/* 三个阶段面板始终挂载，只用 display 切换，避免来回切换丢失面板内的配置状态 */}
           <div className="workbench-stage">
-            <div style={{ display: stage === "detection" ? undefined : "none" }}>
+            <div className="workbench-pane" style={{ display: stage === "detection" ? undefined : "none" }}>
               <DetectionTable
                 spans={spans}
                 byCode={byCode}
@@ -432,7 +432,7 @@ export default function WorkbenchPage({
               />
             </div>
 
-            <div style={{ display: stage === "mask" ? undefined : "none" }}>
+            <div className="workbench-pane" style={{ display: stage === "mask" ? undefined : "none" }}>
               <MaskPanel
                 spans={activeSpans}
                 byCode={byCode}
@@ -444,7 +444,7 @@ export default function WorkbenchPage({
               />
             </div>
 
-            <div style={{ display: stage === "compare" ? undefined : "none" }}>
+            <div className="workbench-pane" style={{ display: stage === "compare" ? undefined : "none" }}>
               {maskedText !== null ? (
                 <CompareView
                   embedded
@@ -452,7 +452,6 @@ export default function WorkbenchPage({
                   masked={maskedText}
                   spans={spans}
                   applied={applied}
-                  byCode={byCode}
                 />
               ) : (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未生成脱敏结果" />

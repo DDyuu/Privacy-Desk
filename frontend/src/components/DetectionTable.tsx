@@ -1,8 +1,9 @@
 // 识别结果表：按类型筛选命中片段，并可逐条勾选忽略（忽略项不参与后续脱敏）。
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Checkbox,
   Empty,
+  Pagination,
   Select,
   Space,
   Spin,
@@ -48,6 +49,9 @@ export default function DetectionTable({
   onToggleIgnore,
 }: DetectionTableProps) {
   const [filterCode, setFilterCode] = useState("all");
+  // 分页改为自己控制，才能把分页器放到筛选同一行；表格本身不再渲染底部分页
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
 
   const codes = useMemo(
     () => Array.from(new Set(spans.map((span) => span.type_code))),
@@ -62,6 +66,15 @@ export default function DetectionTable({
       activeFilter === "all" ? spans : spans.filter((span) => span.type_code === activeFilter);
     return [...filtered].sort((a, b) => a.start - b.start);
   }, [spans, activeFilter]);
+
+  // 筛选条件或识别结果变化后回到第一页，避免停在超出范围的页码
+  useEffect(() => {
+    setPage(1);
+  }, [activeFilter, spans]);
+
+  const totalPages = Math.max(Math.ceil(rows.length / PAGE_SIZE), 1);
+  const safePage = Math.min(page, totalPages);
+  const pagedRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const columns: ColumnsType<Span> = [
     {
@@ -152,21 +165,32 @@ export default function DetectionTable({
         </div>
       ) : (
         <>
-          <Space wrap style={{ marginBottom: 10 }}>
-            <Select
+          <div className="detection-toolbar">
+            <Space wrap>
+              <Select
+                size="small"
+                style={{ width: 168 }}
+                value={activeFilter}
+                onChange={setFilterCode}
+                options={[
+                  { value: "all", label: "全部类型" },
+                  ...codes.map((code) => ({ value: code, label: byCode[code]?.name ?? code })),
+                ]}
+              />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                共 {rows.length} 处
+              </Typography.Text>
+            </Space>
+            <Pagination
               size="small"
-              style={{ width: 168 }}
-              value={activeFilter}
-              onChange={setFilterCode}
-              options={[
-                { value: "all", label: "全部类型" },
-                ...codes.map((code) => ({ value: code, label: byCode[code]?.name ?? code })),
-              ]}
+              current={safePage}
+              pageSize={PAGE_SIZE}
+              total={rows.length}
+              showSizeChanger={false}
+              hideOnSinglePage
+              onChange={setPage}
             />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              共 {rows.length} 处
-            </Typography.Text>
-          </Space>
+          </div>
           <Table<Span>
             size="small"
             rowKey={spanKey}
@@ -176,8 +200,8 @@ export default function DetectionTable({
             }
             loading={loading}
             columns={columns}
-            dataSource={rows}
-            pagination={{ pageSize: 8, size: "small", showSizeChanger: false, hideOnSinglePage: true }}
+            dataSource={pagedRows}
+            pagination={false}
             // 横向滚动宽度等于各列固定宽度之和（56+104+140+96+70+64+76+58），列宽调整时需同步
             scroll={{ x: 664 }}
             locale={{

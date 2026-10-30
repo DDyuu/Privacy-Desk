@@ -87,8 +87,19 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  align-items: start;
+  /* 两栏共用同一个滚动容器：只有一条滚动条，左右内容始终按同一位置移动 */
+  max-height: 480px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .compare-grid > * {
+  min-width: 0;
+}
+/* 每栏纵向排列标题与文本框 */
+.compare-col {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 .compare-pane {
@@ -96,26 +107,41 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
-  /* 固定高度让左右两栏各自滚动，切换文档时页面不跳动 */
-  height: 480px;
-  overflow: auto;
+  /* 高度由内容决定，滚动交给外层 compare-grid */
+  overflow: visible;
   white-space: pre-wrap;
+  /* ENC 令牌等无空格长串会撑破容器，允许在任意字符处折行，避免横向拖动 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-size: 13px;
   line-height: 1.9;
 }
-mark.hit-high {
-  background: #fee2e2;
-  color: #991b1b;
-  border-radius: 3px;
+/* 嵌入工作台：共用滚动区撑满可用高度 */
+.compare-embedded {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
-mark.hit-medium {
-  background: #fef3c7;
-  color: #92400e;
-  border-radius: 3px;
+.compare-embedded .compare-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
 }
+/* 对比区统一用蓝色底标记敏感片段，不再按等级区分颜色 */
+mark.hit-high,
+mark.hit-medium,
 mark.hit-low {
-  background: #e0f2fe;
-  color: #075985;
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-radius: 3px;
+}
+/* 悬停联动：原文与替换串的对应片段变成红色底，不使用描边框选 */
+mark.link-active,
+mark.mask-replacement.link-active,
+mark.mask-kept.link-active {
+  background: #fecaca;
+  color: #b91c1c;
   border-radius: 3px;
 }
 .stat-bar {
@@ -349,6 +375,11 @@ mark.hit-low {
   min-height: 0;
   overflow: auto;
 }
+/* 阶段容器占满 stage 高度，嵌入的对比视图才能用 100% 高度撑满 */
+.workbench-pane {
+  height: 100%;
+  min-height: 0;
+}
 .workbench-footer {
   flex: 0 0 auto;
   margin-top: 12px;
@@ -358,6 +389,15 @@ mark.hit-low {
   align-items: center;
   justify-content: center;
   min-height: 320px;
+}
+/* 筛选与分页同一行：窄窗口下自动换行，分页保持在右侧 */
+.detection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 .list-count {
   color: var(--muted);
@@ -481,19 +521,28 @@ mark.hit-low {
 
 /* 对比与弹层 */
 .compare-title {
+  /* 共用滚动区时标题吸顶，滚动长文仍能区分左右栏 */
+  position: sticky;
+  top: 0;
+  z-index: 1;
   margin-bottom: 6px;
+  padding-bottom: 4px;
+  background: #fff;
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
 }
 mark.mask-replacement {
   border-radius: 3px;
-  background: #f1f5f9;
-  color: #0f766e;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
-.popover-detail {
-  font-size: 12px;
-  line-height: 1.8;
+/* 已识别但未脱敏的片段：同样是蓝色底，用虚线区分“仍是明文” */
+mark.mask-kept {
+  border-radius: 3px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  text-decoration: underline dotted #60a5fa;
 }
 
 /* 设置页：API Key 标签行，右侧放环境变量检测入口 */
