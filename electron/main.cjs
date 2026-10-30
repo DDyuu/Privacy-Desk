@@ -234,7 +234,10 @@ function applyContentZoom(win) {
     win.webContents.setZoomFactor(1);
     return;
   }
+  // 最小化/恢复瞬间尺寸可能为 0，若照常计算会被 clamp 到 0.5 并一直卡住
+  if (win.isMinimized() || !win.isVisible()) return;
   const [width, height] = win.getContentSize();
+  if (width < 320 || height < 240) return;
   const scale = Math.min(width / DESIGN_WIDTH, height / DESIGN_HEIGHT);
   win.webContents.setZoomFactor(Math.min(Math.max(scale, 0.5), 2));
 }
@@ -327,7 +330,14 @@ function createWindow(port, token) {
   mainWindow = win;
   windowMode = "lock";
   applyContentZoom(win);
-  win.on("resize", () => applyContentZoom(win));
+  // 最小化/恢复、最大化切换、重新获得焦点时都要重算缩放；
+  // 窗口尺寸在事件触发瞬间可能还没稳定，延迟一帧再算，避免用中间值把缩放锁死
+  for (const name of ["resize", "maximize", "unmaximize", "restore", "show", "focus"]) {
+    win.on(name, () => {
+      if (win.isDestroyed()) return;
+      setTimeout(() => applyContentZoom(win), 60);
+    });
+  }
   win.webContents.on("did-finish-load", () => applyContentZoom(win));
   // 禁用快捷键缩放，避免手动放大后内容溢出
   win.webContents.on("before-input-event", (event, input) => {
